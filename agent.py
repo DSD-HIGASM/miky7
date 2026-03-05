@@ -1,15 +1,67 @@
 import os, subprocess, psutil, base64, re, logging, socket, uuid
+import threading, time, urllib.request
+from urllib.error import URLError, HTTPError
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from config import BACKEND_TOKEN
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
-
 STARTUP_URL_FILE = os.path.expanduser("~/kiosko_startup.url")
 CACHE_DIR = os.path.expanduser("~/.config/chromium-kiosko-hsi/Default/Cache/*")
+
+# =================================================================
+# WATCHDOG FAILOVER: Auto-curación ante caída de HSI
+# =================================================================
+hsi_is_down = False
+
+def watchdog_hsi():
+    global hsi_is_down
+    maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
+    sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
+    tts_dir = os.path.expanduser('~/control_remoto/miki_tts')
+    
+    while True:
+        time.sleep(15) # Escaneo cada 15 segundos
+        try:
+            with open(STARTUP_URL_FILE, 'r') as f: target_url = f.read().strip()
+        except:
+            continue
+            
+        # Ignoramos si la placa de mantenimiento fue puesta manualmente o no es web
+        if "mantenimiento.html" in target_url or not target_url.startswith("http"):
+            continue
+
+        current_status_down = False
+        try:
+            req = urllib.request.Request(target_url, headers={'User-Agent': 'Miki/Failover'})
+            with urllib.request.urlopen(req, timeout=7) as response:
+                if response.status >= 500:
+                    current_status_down = True
+        except HTTPError as e:
+            if e.code >= 500: current_status_down = True
+        except URLError:
+            current_status_down = True # Timeout, sin internet, DNS roto
+        except Exception:
+            current_status_down = True
+
+        if current_status_down and not hsi_is_down:
+            hsi_is_down = True
+            logging.info("HSI CAÍDA: Failover visual activado.")
+            cmd = f"export DISPLAY=:0 && pkill chromium && sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required --load-extension={tts_dir} {maint_url} > /dev/null 2>&1 &"
+            subprocess.Popen(cmd, shell=True)
+            
+        elif not current_status_down and hsi_is_down:
+            hsi_is_down = False
+            logging.info("HSI RECUPERADA: Restaurando turnero.")
+            subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+
+# Iniciar el guardián en segundo plano
+threading.Thread(target=watchdog_hsi, daemon=True).start()
+# =================================================================
+
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 def verificar_auth(req):
     token = req.headers.get('Authorization')
@@ -42,25 +94,17 @@ def send_wol(macaddress):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.sendto(data, ('255.255.255.255', 9))
         return True
-    except Exception as e:
-        return False
+    except: return False
 
-# ----- NUEVO ENDPOINT PARA RECIBIR AUDIO DESDE LA EXTENSIÓN -----
 @app.route('/speak', methods=['POST'])
 def speak():
-    # Solo acepta peticiones de la propia máquina (seguridad)
     if request.remote_addr not in ['127.0.0.1', 'localhost']:
         if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
-    
     texto = request.json.get('texto', '')
     if texto:
-        # Sanitizar para evitar inyección de comandos
         texto_limpio = texto.replace("'", "").replace('"', "")
-        # Ejecutar espeak (Voz en español latino, velocidad 140)
         run_cmd(f"espeak -v es-la -s 140 '{texto_limpio}'")
-        
     return jsonify({"status": "ok"})
-# ----------------------------------------------------------------
 
 @app.route('/status', methods=['GET'])
 def status():
