@@ -6,7 +6,7 @@ from config import BACKEND_TOKEN
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # =================================================================
-# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS (Text-To-Speech) V1.3
+# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS (Text-To-Speech) V1.4
 # =================================================================
 def setup_tts_extension():
     home = os.path.expanduser("~")
@@ -14,66 +14,69 @@ def setup_tts_extension():
     
     os.makedirs(tts_dir, exist_ok=True)
     
-    manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "1.3", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
+    # 1. Instalar motor de voz nativo de Linux silenciosamente (Por si no lo tiene)
+    os.system("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y espeak speech-dispatcher > /dev/null 2>&1")
+    
+    manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "1.4", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
     
     content_js = """let ultimoLlamado = "";
-    let timeoutId = null;
 
     const hablar = (texto) => {
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
             let msg = new SpeechSynthesisUtterance(texto);
             msg.lang = 'es-AR';
-            msg.rate = 0.85; // Velocidad pausada para sala de espera
+            msg.rate = 0.85; // Voz calmada
             window.speechSynthesis.speak(msg);
         }
     };
 
-    const observar = new MutationObserver(() => {
-        clearTimeout(timeoutId);
+    // BUCLE INVULNERABLE: Escanea la pantalla cada 1 segundo sin importar cómo mute el DOM
+    setInterval(() => {
+        let parrafos = Array.from(document.querySelectorAll('p'));
         
-        // [Inferencia] Esperamos 600ms para asegurar que Chakra UI terminó de renderizar todo el DOM
-        timeoutId = setTimeout(() => {
-            let nodoH1 = document.querySelector('h1.chakra-heading');
-            if (!nodoH1) return;
-            
-            let paciente = nodoH1.innerText.trim();
-            
-            // Recolectamos todos los párrafos de la pantalla
-            let parrafos = Array.from(document.querySelectorAll('p.chakra-text'));
-            
-            // Encontramos cuál de todos los párrafos es el del consultorio
-            let nodoDestino = parrafos.find(p => {
-                let txt = p.innerText.toLowerCase();
-                return txt.includes('consultorio') || txt.includes('triage') || txt.includes('box');
-            });
-            
-            let destino = nodoDestino ? nodoDestino.innerText.trim() : "";
+        // Buscamos el ancla exacta que no cambia
+        let nodoAlerta = parrafos.find(p => p.innerText.trim().toLowerCase() === 'último llamado');
+        if (!nodoAlerta) return;
 
-            // LÓGICA INTELIGENTE: Si el sistema oculta el nombre y pone "PACIENTE TEMPORAL"
-            // sabemos que el nombre real es el párrafo que está justo arriba del destino.
-            if (paciente === "PACIENTE TEMPORAL" && nodoDestino) {
-                let index = parrafos.indexOf(nodoDestino);
-                if (index > 0) {
-                    paciente = parrafos[index - 1].innerText.trim();
-                }
+        // Subimos hasta atrapar la tarjeta completa que titila
+        let bloqueTurno = nodoAlerta.closest('.chakra-stack') || nodoAlerta.parentElement.parentElement;
+        
+        let nodoH1 = bloqueTurno.querySelector('h1');
+        if (!nodoH1) return;
+        
+        let paciente = nodoH1.innerText.trim();
+        let parrafosBloque = Array.from(bloqueTurno.querySelectorAll('p'));
+        
+        // Buscar el destino inteligentemente
+        let nodoDestino = parrafosBloque.find(p => 
+            p.innerText.toLowerCase().includes('consultorio') || 
+            p.innerText.toLowerCase().includes('triage') || 
+            p.innerText.toLowerCase().includes('box')
+        );
+        
+        let destino = nodoDestino ? nodoDestino.innerText.trim() : "";
+
+        // Si el H1 es temporal, atrapamos el párrafo que está arriba del consultorio
+        if (paciente === "PACIENTE TEMPORAL" && nodoDestino) {
+            let idx = parrafosBloque.indexOf(nodoDestino);
+            if (idx > 0) {
+                paciente = parrafosBloque[idx - 1].innerText.trim();
             }
+        }
 
-            // Si tenemos un nombre válido y un destino, lanzamos la voz
-            if (paciente && destino && paciente !== "PACIENTE TEMPORAL") {
-                let idLlamado = paciente + destino;
-                
-                // Evitamos que repita en bucle el mismo llamado
-                if (idLlamado !== ultimoLlamado) {
-                    ultimoLlamado = idLlamado;
-                    let destinoHablado = destino.replace('-', ' ');
-                    hablar(`Atención. Paciente ${paciente}, por favor dirigirse a ${destinoHablado}`);
-                }
+        // Si la lectura es válida y no es un duplicado, disparamos
+        if (paciente && destino && paciente !== "PACIENTE TEMPORAL") {
+            let idLlamado = paciente + destino;
+            
+            if (idLlamado !== ultimoLlamado) {
+                ultimoLlamado = idLlamado;
+                let destinoHablado = destino.replace('-', ' ');
+                hablar(`Atención. Paciente ${paciente}, por favor dirigirse a ${destinoHablado}`);
             }
-        }, 600); 
-    });
-
-    observar.observe(document.body, { childList: true, subtree: true });"""
+        }
+    }, 1000); // 1000 milisegundos = 1 escaneo por segundo
+    """
     
     with open(os.path.join(tts_dir, "manifest.json"), "w") as f: f.write(manifest)
     with open(os.path.join(tts_dir, "content.js"), "w") as f: f.write(content_js)
@@ -84,14 +87,12 @@ def setup_tts_extension():
         if "--load-extension" not in content:
             content = content.replace("--kiosk", f"--kiosk --load-extension={tts_dir}")
             with open(sh_path, "w") as f: f.write(content)
-            subprocess.Popen("export DISPLAY=:0 && pkill chromium && sleep 2 && nohup bash " + sh_path + " > /dev/null 2>&1 &", shell=True)
 
 try:
     setup_tts_extension()
 except Exception as e:
     logging.error(f"Fallo en TTS setup: {e}")
 # =================================================================
-
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
