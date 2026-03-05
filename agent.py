@@ -19,7 +19,10 @@ def verificar_auth(req):
 
 def run_cmd(cmd):
     try:
-        subprocess.run(f"export DISPLAY=:0 && {cmd}", shell=True, check=True)
+        uid = os.getuid()
+        # [Corrección] Se inyecta la llave XDG_RUNTIME_DIR para que el servicio de fondo pueda acceder al audio y video
+        full_cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && {cmd}"
+        subprocess.run(full_cmd, shell=True, check=True)
         return True
     except Exception as e:
         logging.error(f"Error ejecutando {cmd}: {e}")
@@ -53,13 +56,17 @@ def status():
         with open(STARTUP_URL_FILE, 'r') as f: url = f.read().strip()
     except: url = "Sin Configurar"
 
-    vol = "Err"
+    vol = "0"
     try:
-        # Pide a ALSA todos los controles y agarra el primer porcentaje que encuentre (Master, PCM, HDMI, etc)
-        output = subprocess.check_output("amixer", shell=True).decode()
-        match = re.search(r"\[(\d+)%\]", output)
+        uid = os.getuid()
+        # [Corrección] Usamos pactl y apuntamos al @DEFAULT_SINK@, detecta automáticamente HDMI, Jack o Bluetooth
+        cmd_vol = f"export XDG_RUNTIME_DIR=/run/user/{uid} && pactl get-sink-volume @DEFAULT_SINK@"
+        output = subprocess.check_output(cmd_vol, shell=True, stderr=subprocess.DEVNULL).decode()
+        match = re.search(r"(\d+)%", output)
         if match: vol = match.group(1)
-    except: pass
+    except Exception as e:
+        logging.error(f"Error leyendo volumen: {e}")
+        vol = "Err"
 
     return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac()})
 
@@ -86,10 +93,9 @@ def control():
         repo_url = request.json.get('url')
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
-            # Descarga el archivo, lo reemplaza y fuerza el reinicio total del hardware
             cmd = f"sleep 2 && wget -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && sudo reboot"
             subprocess.Popen(cmd, shell=True)
-            return jsonify({"status": "ok", "msg": "OTA iniciada. Reiniciando hardware..."})
+            return jsonify({"status": "ok", "msg": "OTA iniciada"})
         return jsonify({"error": "Falta URL"}), 400
     elif acc == 'wol':
         target_mac = request.json.get('mac')
@@ -101,22 +107,20 @@ def control():
     elif acc == 'wake_screen':
         run_cmd("xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0")
     elif acc == 'schedule_power':
-        on_t = request.json.get('on_time')  # Ej: "06:00"
-        off_t = request.json.get('off_time') # Ej: "20:00"
+        on_t = request.json.get('on_time')
+        off_t = request.json.get('off_time')
         if on_t and off_t:
             on_h, on_m = on_t.split(':')
             off_h, off_m = off_t.split(':')
-            # Extraer cron actual, limpiar reglas viejas de DPMS, inyectar nuevas
+            uid = os.getuid()
             os.system(f"crontab -l 2>/dev/null | grep -v 'dpms' > /tmp/mycron")
-            os.system(f"echo '{off_m} {off_h} * * * export DISPLAY=:0 && xset dpms force off' >> /tmp/mycron")
-            os.system(f"echo '{on_m} {on_h} * * * export DISPLAY=:0 && xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0' >> /tmp/mycron")
+            os.system(f"echo '{off_m} {off_h} * * * export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && xset dpms force off' >> /tmp/mycron")
+            os.system(f"echo '{on_m} {on_h} * * * export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0' >> /tmp/mycron")
             os.system(f"crontab /tmp/mycron")
             return jsonify({"status": "ok"})
             
-    elif acc == 'vol_up': 
-        run_cmd("amixer sset Master 5%+ || amixer sset PCM 5%+ || amixer sset HDMI 5%+")
-    elif acc == 'vol_down': 
-        run_cmd("amixer sset Master 5%- || amixer sset PCM 5%- || amixer sset HDMI 5%-")
+    elif acc == 'vol_up': run_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5%")
+    elif acc == 'vol_down': run_cmd("pactl set-sink-volume @DEFAULT_SINK@ -5%")
         
     return jsonify({"status": "ok"})
 
