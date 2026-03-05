@@ -5,6 +5,64 @@ from config import BACKEND_TOKEN
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# =================================================================
+# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS (Text-To-Speech)
+# =================================================================
+def setup_tts_extension():
+    home = os.path.expanduser("~")
+    tts_dir = os.path.join(home, "control_remoto", "miki_tts")
+    
+    if not os.path.exists(tts_dir):
+        logging.info("Instalando módulo TTS vía OTA...")
+        os.makedirs(tts_dir, exist_ok=True)
+        
+        manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "1.0", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
+        
+        content_js = """let ultimoLlamado = "";
+        const hablar = (texto) => {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                let msg = new SpeechSynthesisUtterance(texto);
+                msg.lang = 'es-AR';
+                msg.rate = 0.85;
+                window.speechSynthesis.speak(msg);
+            }
+        };
+        const observar = new MutationObserver(() => {
+            let nodoPaciente = document.querySelector('h1.chakra-heading');
+            if (nodoPaciente) {
+                let paciente = nodoPaciente.innerText.trim();
+                let parrafos = Array.from(document.querySelectorAll('p.chakra-text'));
+                let nodoDestino = parrafos.find(p => p.innerText.toLowerCase().includes('consultorio') || p.innerText.toLowerCase().includes('triage') || p.innerText.toLowerCase().includes('box'));
+                let destino = nodoDestino ? nodoDestino.innerText.trim() : "su consultorio asignado";
+                let idLlamado = paciente + destino;
+                
+                if (paciente !== "" && idLlamado !== ultimoLlamado && paciente !== "PACIENTE TEMPORAL") {
+                    ultimoLlamado = idLlamado;
+                    setTimeout(() => hablar(`Atención. Paciente ${paciente}, por favor dirigirse a ${destino}`), 1500);
+                }
+            }
+        });
+        observar.observe(document.body, { childList: true, subtree: true });"""
+        
+        with open(os.path.join(tts_dir, "manifest.json"), "w") as f: f.write(manifest)
+        with open(os.path.join(tts_dir, "content.js"), "w") as f: f.write(content_js)
+            
+        sh_path = os.path.join(home, "iniciar_kiosko.sh")
+        if os.path.exists(sh_path):
+            with open(sh_path, "r") as f: content = f.read()
+            if "--load-extension" not in content:
+                content = content.replace("--kiosk", f"--kiosk --load-extension={tts_dir}")
+                with open(sh_path, "w") as f: f.write(content)
+                # Forzamos recarga de Chromium por las dudas de que haya arrancado antes que el agente
+                subprocess.Popen("export DISPLAY=:0 && pkill chromium && sleep 2 && nohup bash " + sh_path + " > /dev/null 2>&1 &", shell=True)
+
+try:
+    setup_tts_extension()
+except Exception as e:
+    logging.error(f"Fallo en TTS setup: {e}")
+# =================================================================
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -20,7 +78,6 @@ def verificar_auth(req):
 def run_cmd(cmd):
     try:
         uid = os.getuid()
-        # [Corrección] Se inyecta la llave XDG_RUNTIME_DIR para que el servicio de fondo pueda acceder al audio y video
         full_cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && {cmd}"
         subprocess.run(full_cmd, shell=True, check=True)
         return True
@@ -51,23 +108,18 @@ def send_wol(macaddress):
 def status():
     try: cpu = psutil.cpu_percent(interval=0.1)
     except: cpu = 0
-    
     try: 
         with open(STARTUP_URL_FILE, 'r') as f: url = f.read().strip()
     except: url = "Sin Configurar"
-
     vol = "0"
     try:
         uid = os.getuid()
-        # [Corrección] Usamos pactl y apuntamos al @DEFAULT_SINK@, detecta automáticamente HDMI, Jack o Bluetooth
         cmd_vol = f"export XDG_RUNTIME_DIR=/run/user/{uid} && pactl get-sink-volume @DEFAULT_SINK@"
         output = subprocess.check_output(cmd_vol, shell=True, stderr=subprocess.DEVNULL).decode()
         match = re.search(r"(\d+)%", output)
         if match: vol = match.group(1)
     except Exception as e:
-        logging.error(f"Error leyendo volumen: {e}")
         vol = "Err"
-
     return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac()})
 
 @app.route('/set_startup', methods=['POST'])
@@ -82,13 +134,9 @@ def set_startup():
 def control():
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     acc = request.json.get('accion')
-    
-    if acc == 'refresh': 
-        run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
-    elif acc == 'clear_cache':
-        run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
-    elif acc == 'reboot': 
-        os.system("sudo reboot")
+    if acc == 'refresh': run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+    elif acc == 'clear_cache': run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+    elif acc == 'reboot': os.system("sudo reboot")
     elif acc == 'update_agent':
         repo_url = request.json.get('url')
         if repo_url:
@@ -102,10 +150,8 @@ def control():
         if target_mac:
             send_wol(target_mac)
             return jsonify({"status": "ok", "msg": f"WoL enviado a {target_mac}"})
-    elif acc == 'sleep_screen':
-        run_cmd("xset dpms force off")
-    elif acc == 'wake_screen':
-        run_cmd("xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0")
+    elif acc == 'sleep_screen': run_cmd("xset dpms force off")
+    elif acc == 'wake_screen': run_cmd("xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0")
     elif acc == 'schedule_power':
         on_t = request.json.get('on_time')
         off_t = request.json.get('off_time')
@@ -118,10 +164,8 @@ def control():
             os.system(f"echo '{on_m} {on_h} * * * export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0' >> /tmp/mycron")
             os.system(f"crontab /tmp/mycron")
             return jsonify({"status": "ok"})
-            
     elif acc == 'vol_up': run_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5%")
     elif acc == 'vol_down': run_cmd("pactl set-sink-volume @DEFAULT_SINK@ -5%")
-        
     return jsonify({"status": "ok"})
 
 @app.route('/screenshot', methods=['GET'])
