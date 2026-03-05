@@ -42,7 +42,7 @@ echo " "
 # 2. ACTUALIZACIÓN E INSTALACIÓN DE PAQUETES
 echo -e "📦 ${BLUE}Instalando dependencias de grado de producción...${NC}"
 sudo apt-get update
-sudo apt-get install -y python3-flask python3-flask-cors python3-psutil xdotool unclutter scrot alsa-utils x11vnc net-tools ufw gunicorn wget chromium
+sudo apt-get install -y python3-flask python3-flask-cors python3-psutil xdotool unclutter scrot alsa-utils x11vnc net-tools ufw gunicorn wget chromium openssh-server
 
 # 3. ESTRUCTURA DE CARPETAS Y PERMISOS ESTRICTOS
 mkdir -p "$INSTALL_DIR"
@@ -284,6 +284,7 @@ EOF
 echo -e "🛡️  ${BLUE}Aplicando políticas de red (UFW)...${NC}"
 sudo ufw allow 5000/tcp comment 'Miki Web Agent'
 sudo ufw allow 5900/tcp comment 'Miki VNC'
+sudo ufw allow 22/tcp comment 'SSH'
 
 echo -e "${GREEN}======================================================${NC}"
 echo -e "${GREEN} ✅ INSTALACIÓN CLEAN FINALIZADA CON ÉXITO ✅ ${NC}"
