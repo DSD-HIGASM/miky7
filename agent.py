@@ -1,0 +1,128 @@
+import os, subprocess, psutil, base64, re, logging, socket, uuid
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from config import BACKEND_TOKEN
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+STARTUP_URL_FILE = os.path.expanduser("~/kiosko_startup.url")
+CACHE_DIR = os.path.expanduser("~/.config/chromium-kiosko-hsi/Default/Cache/*")
+
+def verificar_auth(req):
+    token = req.headers.get('Authorization')
+    if token and "Bearer" in token:
+        return token.split(" ")[1] == BACKEND_TOKEN
+    return False
+
+def run_cmd(cmd):
+    try:
+        subprocess.run(f"export DISPLAY=:0 && {cmd}", shell=True, check=True)
+        return True
+    except Exception as e:
+        logging.error(f"Error ejecutando {cmd}: {e}")
+        return False
+
+def get_mac():
+    try:
+        mac_num = hex(uuid.getnode()).replace('0x', '').upper()
+        mac_num = mac_num.zfill(12)
+        return ':'.join(mac_num[i: i + 2] for i in range(0, 11, 2))
+    except: return "00:00:00:00:00:00"
+
+def send_wol(macaddress):
+    try:
+        macaddress = macaddress.replace(':', '').replace('-', '')
+        data = bytes.fromhex('FF' * 6 + macaddress * 16)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.sendto(data, ('255.255.255.255', 9))
+        return True
+    except Exception as e:
+        logging.error(f"Error WoL: {e}")
+        return False
+
+@app.route('/status', methods=['GET'])
+def status():
+    try: cpu = psutil.cpu_percent(interval=0.1)
+    except: cpu = 0
+    
+    try: 
+        with open(STARTUP_URL_FILE, 'r') as f: url = f.read().strip()
+    except: url = "Sin Configurar"
+
+    vol = "0"
+    try:
+        output = subprocess.check_output("amixer sget Master", shell=True).decode()
+        match = re.search(r"\[(\d+)%\]", output)
+        if match: vol = match.group(1)
+    except: vol = "Err"
+
+    return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac()})
+
+@app.route('/set_startup', methods=['POST'])
+def set_startup():
+    if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
+    url = request.json.get('url')
+    with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
+    os.system(f"nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
+    return jsonify({"status": "ok", "url": url})
+
+@app.route('/control', methods=['POST'])
+def control():
+    if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
+    acc = request.json.get('accion')
+    
+    if acc == 'refresh': 
+        run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+    elif acc == 'clear_cache':
+        run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+    elif acc == 'reboot': 
+        os.system("sudo reboot")
+    elif acc == 'update_agent':
+        repo_url = request.json.get('url')
+        if repo_url:
+            install_path = os.path.dirname(os.path.abspath(__file__))
+            cmd = f"sleep 2 && wget -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && sudo systemctl restart miki_agent.service"
+            subprocess.Popen(cmd, shell=True)
+            return jsonify({"status": "ok", "msg": "OTA iniciada"})
+        return jsonify({"error": "Falta URL"}), 400
+    elif acc == 'wol':
+        target_mac = request.json.get('mac')
+        if target_mac:
+            send_wol(target_mac)
+            return jsonify({"status": "ok", "msg": f"WoL enviado a {target_mac}"})
+    elif acc == 'sleep_screen':
+        run_cmd("xset dpms force off")
+    elif acc == 'wake_screen':
+        run_cmd("xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0")
+    elif acc == 'schedule_power':
+        on_t = request.json.get('on_time')  # Ej: "06:00"
+        off_t = request.json.get('off_time') # Ej: "20:00"
+        if on_t and off_t:
+            on_h, on_m = on_t.split(':')
+            off_h, off_m = off_t.split(':')
+            # Extraer cron actual, limpiar reglas viejas de DPMS, inyectar nuevas
+            os.system(f"crontab -l 2>/dev/null | grep -v 'dpms' > /tmp/mycron")
+            os.system(f"echo '{off_m} {off_h} * * * export DISPLAY=:0 && xset dpms force off' >> /tmp/mycron")
+            os.system(f"echo '{on_m} {on_h} * * * export DISPLAY=:0 && xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0' >> /tmp/mycron")
+            os.system(f"crontab /tmp/mycron")
+            return jsonify({"status": "ok"})
+            
+    elif acc == 'vol_up': run_cmd("amixer sset Master 5%+")
+    elif acc == 'vol_down': run_cmd("amixer sset Master 5%-")
+        
+    return jsonify({"status": "ok"})
+
+@app.route('/screenshot', methods=['GET'])
+def screenshot():
+    if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
+    p = "/tmp/shot.png"
+    if os.path.exists(p): os.remove(p)
+    run_cmd(f"scrot -z -q 40 {p}") 
+    if os.path.exists(p):
+        with open(p, "rb") as f:
+            return jsonify({"image": base64.b64encode(f.read()).decode('utf-8')})
+    return jsonify({"error": "Fail"}), 500
