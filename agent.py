@@ -6,7 +6,7 @@ from config import BACKEND_TOKEN
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # =================================================================
-# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS (Text-To-Speech) V1.2
+# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS (Text-To-Speech) V1.3
 # =================================================================
 def setup_tts_extension():
     home = os.path.expanduser("~")
@@ -14,56 +14,63 @@ def setup_tts_extension():
     
     os.makedirs(tts_dir, exist_ok=True)
     
-    manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "1.2", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
+    manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "1.3", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
     
     content_js = """let ultimoLlamado = "";
+    let timeoutId = null;
+
     const hablar = (texto) => {
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
             let msg = new SpeechSynthesisUtterance(texto);
             msg.lang = 'es-AR';
-            msg.rate = 0.85;
+            msg.rate = 0.85; // Velocidad pausada para sala de espera
             window.speechSynthesis.speak(msg);
         }
     };
 
     const observar = new MutationObserver(() => {
-        // 1. Encontrar el texto "Último llamado" para anclar la búsqueda
-        let parrafos = Array.from(document.querySelectorAll('p'));
-        let nodoAlerta = parrafos.find(p => p.innerText.trim().toLowerCase() === 'último llamado');
-
-        let bloqueTurno = document; // Fallback al documento completo
-        if (nodoAlerta && nodoAlerta.parentElement && nodoAlerta.parentElement.parentElement) {
-            // 2. Aislamos el div contenedor exacto de la tarjeta (css-egoftb)
-            bloqueTurno = nodoAlerta.parentElement.parentElement;
-        }
-
-        // 3. Extraer el H1 de paciente SOLO dentro de esa tarjeta nueva
-        let nodoPaciente = bloqueTurno.querySelector('h1');
-
-        if (nodoPaciente) {
-            let paciente = nodoPaciente.innerText.trim();
-
-            // 4. Buscar el destino en la misma tarjeta
-            let parrafosBloque = Array.from(bloqueTurno.querySelectorAll('p'));
-            let nodoDestino = parrafosBloque.find(p => 
-                p.innerText.toLowerCase().includes('consultorio') || 
-                p.innerText.toLowerCase().includes('triage') || 
-                p.innerText.toLowerCase().includes('box')
-            );
+        clearTimeout(timeoutId);
+        
+        // [Inferencia] Esperamos 600ms para asegurar que Chakra UI terminó de renderizar todo el DOM
+        timeoutId = setTimeout(() => {
+            let nodoH1 = document.querySelector('h1.chakra-heading');
+            if (!nodoH1) return;
             
-            let destino = nodoDestino ? nodoDestino.innerText.trim() : "su lugar asignado";
-            let idLlamado = paciente + destino;
+            let paciente = nodoH1.innerText.trim();
             
-            // 5. Filtrar marcadores temporales o duplicados
-            if (paciente !== "" && paciente !== "PACIENTE TEMPORAL" && idLlamado !== ultimoLlamado) {
-                ultimoLlamado = idLlamado;
-                // Reemplazamos guiones por espacios para que la voz fluya mejor
-                let destinoHablado = destino.replace('-', ' ');
-                
-                setTimeout(() => hablar(`Atención. Paciente ${paciente}, por favor dirigirse a ${destinoHablado}`), 1500);
+            // Recolectamos todos los párrafos de la pantalla
+            let parrafos = Array.from(document.querySelectorAll('p.chakra-text'));
+            
+            // Encontramos cuál de todos los párrafos es el del consultorio
+            let nodoDestino = parrafos.find(p => {
+                let txt = p.innerText.toLowerCase();
+                return txt.includes('consultorio') || txt.includes('triage') || txt.includes('box');
+            });
+            
+            let destino = nodoDestino ? nodoDestino.innerText.trim() : "";
+
+            // LÓGICA INTELIGENTE: Si el sistema oculta el nombre y pone "PACIENTE TEMPORAL"
+            // sabemos que el nombre real es el párrafo que está justo arriba del destino.
+            if (paciente === "PACIENTE TEMPORAL" && nodoDestino) {
+                let index = parrafos.indexOf(nodoDestino);
+                if (index > 0) {
+                    paciente = parrafos[index - 1].innerText.trim();
+                }
             }
-        }
+
+            // Si tenemos un nombre válido y un destino, lanzamos la voz
+            if (paciente && destino && paciente !== "PACIENTE TEMPORAL") {
+                let idLlamado = paciente + destino;
+                
+                // Evitamos que repita en bucle el mismo llamado
+                if (idLlamado !== ultimoLlamado) {
+                    ultimoLlamado = idLlamado;
+                    let destinoHablado = destino.replace('-', ' ');
+                    hablar(`Atención. Paciente ${paciente}, por favor dirigirse a ${destinoHablado}`);
+                }
+            }
+        }, 600); 
     });
 
     observar.observe(document.body, { childList: true, subtree: true });"""
@@ -77,7 +84,6 @@ def setup_tts_extension():
         if "--load-extension" not in content:
             content = content.replace("--kiosk", f"--kiosk --load-extension={tts_dir}")
             with open(sh_path, "w") as f: f.write(content)
-            # Fuerza el reinicio de Chromium solo si la extensión no estaba configurada antes
             subprocess.Popen("export DISPLAY=:0 && pkill chromium && sleep 2 && nohup bash " + sh_path + " > /dev/null 2>&1 &", shell=True)
 
 try:
