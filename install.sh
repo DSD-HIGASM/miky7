@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # =====================================================================
-#  MIKI KIOSKO HSI - INSTALADOR CLEAN INSTALL V9
-#  Arquitectura: Limpieza total + Systemd + Gunicorn + OTA
+#  MIKI KIOSKO HSI - INSTALADOR MAESTRO V14 (Zero-Touch + SSH)
+#  Arquitectura: Limpieza total + Systemd + Gunicorn + OTA + Failover
 # =====================================================================
 
 GREEN='\033[0;32m'
@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${BLUE}======================================================${NC}"
-echo -e "${GREEN} 🧹 INICIANDO LIMPIEZA E INSTALACIÓN DESDE CERO ${NC}"
+echo -e "${GREEN} 🚀 INICIANDO INSTALACIÓN MAESTRA HSI KIOSK ${NC}"
 echo -e "${BLUE}======================================================${NC}"
 echo " "
 
@@ -39,10 +39,14 @@ read -s -p "➤ Ingrese Token/Clave para el Panel de Comando Web: " BACKEND_PASS
 echo ""
 echo " "
 
-# 2. ACTUALIZACIÓN E INSTALACIÓN DE PAQUETES
+# 2. ACTUALIZACIÓN E INSTALACIÓN DE PAQUETES (INCLUYE SSH)
 echo -e "📦 ${BLUE}Instalando dependencias de grado de producción...${NC}"
 sudo apt-get update
-sudo apt-get install -y python3-flask python3-flask-cors python3-psutil xdotool unclutter scrot alsa-utils x11vnc net-tools ufw gunicorn wget chromium openssh-server
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-flask python3-flask-cors python3-psutil xdotool unclutter scrot alsa-utils x11vnc net-tools ufw gunicorn wget chromium openssh-server espeak
+
+# Habilitar SSH desde el arranque
+sudo systemctl enable ssh
+sudo systemctl start ssh
 
 # 3. ESTRUCTURA DE CARPETAS Y PERMISOS ESTRICTOS
 mkdir -p "$INSTALL_DIR"
@@ -89,8 +93,8 @@ LOGO_PATH="$INSTALL_DIR/logo_higa.jpg"
 wget -4 -qO "$LOGO_PATH" "$LOGO_URL"
 (crontab -l 2>/dev/null | grep -v "logo_higa"; echo "0 3 * * * wget -4 -qO $LOGO_PATH $LOGO_URL") | crontab -
 
-# 5.5 CREAR PANTALLA DE MANTENIMIENTO
-echo -e "🎨 ${BLUE}Generando placa de mantenimiento offline pro...${NC}"
+# 5.5 CREAR PANTALLA DE MANTENIMIENTO (MODO CLARO)
+echo -e "🎨 ${BLUE}Generando placa de mantenimiento offline pro (Light Mode)...${NC}"
 cat << 'EOF' > "$INSTALL_DIR/mantenimiento.html"
 <!DOCTYPE html>
 <html lang="es">
@@ -99,25 +103,25 @@ cat << 'EOF' > "$INSTALL_DIR/mantenimiento.html"
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema Interrumpido</title>
     <style>
-        :root { --pba-pink: #e81f76; --pba-blue: #417099; --pba-cyan: #00aec3; --bg: #0f172a; --text: #f8fafc; }
+        :root { --pba-pink: #e81f76; --pba-blue: #417099; --pba-cyan: #00aec3; --bg: #f8fafc; --text: #0f172a; }
         body, html { background-color: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; overflow: hidden; }
         .pba-gradient-bar { position: absolute; top: 0; left: 0; width: 100%; height: 16px; background: linear-gradient(90deg, var(--pba-pink) 0%, var(--pba-blue) 50%, var(--pba-cyan) 100%); }
-        .card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 2rem; padding: 5rem; max-width: 85%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); backdrop-filter: blur(10px); display: flex; flex-direction: column; align-items: center; }
+        .card { background: #ffffff; border: 1px solid rgba(0,0,0,0.05); border-radius: 2rem; padding: 5rem; max-width: 85%; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.08); display: flex; flex-direction: column; align-items: center; }
         .logos-container { display: flex; align-items: center; gap: 40px; margin-bottom: 40px; }
-        .logo-higa { height: 120px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
+        .logo-higa { height: 120px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
         .icon-alert { width: 100px; height: 100px; color: var(--pba-cyan); animation: pulse 2.5s infinite ease-in-out; }
         @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } }
-        h1 { font-weight: 900; font-size: 5rem; color: #e2e8f0; margin: 0 0 20px 0; text-transform: uppercase; letter-spacing: -1px; }
-        p.instruccion { font-size: 3rem; font-weight: 600; color: #94a3b8; margin: 0; line-height: 1.3; }
-        .highlight { color: var(--pba-cyan); font-weight: 800; }
-        .footer { position: absolute; bottom: 0; left: 0; width: 100%; padding: 2.5rem 0; background: rgba(0,0,0,0.3); border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-around; align-items: center; }
+        h1 { font-weight: 900; font-size: 5rem; color: #1e293b; margin: 0 0 20px 0; text-transform: uppercase; letter-spacing: -1px; }
+        p.instruccion { font-size: 3rem; font-weight: 600; color: #475569; margin: 0; line-height: 1.3; }
+        .highlight { color: var(--pba-blue); font-weight: 800; }
+        .footer { position: absolute; bottom: 0; left: 0; width: 100%; padding: 2.5rem 0; background: #ffffff; border-top: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-around; align-items: center; box-shadow: 0 -10px 20px rgba(0,0,0,0.02); }
         .footer-text { display: flex; flex-direction: column; text-align: left; }
         .footer-text strong { font-size: 1.8rem; color: var(--pba-blue); font-weight: 800; }
         .footer-text span { font-size: 1.2rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-        .spinner-container { display: flex; align-items: center; gap: 15px; background: rgba(65,112,153,0.15); padding: 1rem 2rem; border-radius: 50px; border: 1px solid rgba(65,112,153,0.3); }
-        .spinner { width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.2); border-top-color: var(--pba-cyan); border-radius: 50%; animation: spin 1s linear infinite; }
+        .spinner-container { display: flex; align-items: center; gap: 15px; background: rgba(65,112,153,0.05); padding: 1rem 2rem; border-radius: 50px; border: 1px solid rgba(65,112,153,0.15); }
+        .spinner { width: 24px; height: 24px; border: 3px solid rgba(65,112,153,0.2); border-top-color: var(--pba-blue); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .spinner-text { font-size: 1.2rem; font-weight: 700; color: var(--pba-cyan); }
+        .spinner-text { font-size: 1.2rem; font-weight: 700; color: var(--pba-blue); }
     </style>
 </head>
 <body>
@@ -144,7 +148,7 @@ cat << 'EOF' > "$INSTALL_DIR/mantenimiento.html"
 </html>
 EOF
 
-# 6. AGENTE PYTHON
+# 6. AGENTE PYTHON V2.1 MAESTRO
 echo -e "🐍 ${BLUE}Compilando Agente Controlador...${NC}"
 cat << 'EOF' > "$INSTALL_DIR/agent.py"
 import os, subprocess, psutil, base64, re, logging, socket, uuid
@@ -157,7 +161,73 @@ from config import BACKEND_TOKEN
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # =================================================================
-# INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO PRO V2
+# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS V2.0
+# =================================================================
+def setup_tts_extension():
+    home = os.path.expanduser("~")
+    tts_dir = os.path.join(home, "control_remoto", "miki_tts")
+    os.makedirs(tts_dir, exist_ok=True)
+    
+    os.system("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y espeak > /dev/null 2>&1")
+    
+    manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "2.0", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
+    
+    content_js = """let ultimoLlamado = "";
+    setInterval(() => {
+        let imgAlerta = document.querySelector('img[alt="Logo último llamado"]');
+        if (!imgAlerta) return;
+
+        let bloqueTurno = imgAlerta.closest('.chakra-stack.blink') || imgAlerta.parentElement.parentElement;
+        if (!bloqueTurno) return;
+
+        let nodoH1 = bloqueTurno.querySelector('h1.chakra-heading');
+        if (!nodoH1) return;
+
+        let paciente = nodoH1.innerText.trim();
+        let parrafos = Array.from(bloqueTurno.querySelectorAll('p.chakra-text'));
+        
+        let nodoDestino = parrafos.find(p => 
+            p.innerText.toLowerCase().includes('consultorio') || 
+            p.innerText.toLowerCase().includes('triage') || 
+            p.innerText.toLowerCase().includes('box')
+        );
+        let destino = nodoDestino ? nodoDestino.innerText.trim() : "";
+
+        if (paciente === "PACIENTE TEMPORAL" && nodoDestino) {
+            let idx = parrafos.indexOf(nodoDestino);
+            if (idx > 0) paciente = parrafos[idx - 1].innerText.trim();
+        }
+
+        if (paciente && destino && paciente !== "PACIENTE TEMPORAL") {
+            let idLlamado = paciente + destino;
+            
+            if (idLlamado !== ultimoLlamado) {
+                ultimoLlamado = idLlamado;
+                let destinoHablado = destino.replace('-', ' ');
+                let textoHablado = `Atención. Paciente ${paciente}, por favor dirigirse a ${destinoHablado}`;
+                
+                fetch('http://127.0.0.1:5000/speak', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ texto: textoHablado })
+                }).catch(e => console.log("Error enviando al backend TTS"));
+            }
+        }
+    }, 1000);
+    """
+    
+    with open(os.path.join(tts_dir, "manifest.json"), "w") as f: f.write(manifest)
+    with open(os.path.join(tts_dir, "content.js"), "w") as f: f.write(content_js)
+        
+    sh_path = os.path.join(home, "iniciar_kiosko.sh")
+    if os.path.exists(sh_path):
+        with open(sh_path, "r") as f: content = f.read()
+        if "--load-extension" not in content:
+            content = content.replace("--kiosk", f"--kiosk --load-extension={tts_dir}")
+            with open(sh_path, "w") as f: f.write(content)
+
+# =================================================================
+# INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO CLARA
 # =================================================================
 def setup_mantenimiento_ui():
     html_path = os.path.expanduser("~/control_remoto/mantenimiento.html")
@@ -168,45 +238,45 @@ def setup_mantenimiento_ui():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema Interrumpido</title>
     <style>
-        :root { --bg: #0f172a; --text: #f8fafc; --accent: #0284c7; --warn: #00aec3; }
-        body, html { margin: 0; padding: 0; height: 100vh; background-color: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
-        .top-bar { height: 16px; background: linear-gradient(90deg, #0ea5e9, #0284c7, #00aec3); width: 100%; }
-        .main { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 2rem; }
-        .card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 3rem; padding: 6rem 5rem; max-width: 85%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); position: relative; backdrop-filter: blur(10px); }
-        .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px; background: var(--warn); border-radius: 3rem 3rem 0 0; }
-        .icon { width: 130px; height: 130px; color: var(--warn); margin-bottom: 3rem; animation: pulse 3s infinite ease-in-out; }
+        :root { --pba-pink: #e81f76; --pba-blue: #417099; --pba-cyan: #00aec3; --bg: #f8fafc; --text: #0f172a; }
+        body, html { background-color: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; overflow: hidden; }
+        .pba-gradient-bar { position: absolute; top: 0; left: 0; width: 100%; height: 16px; background: linear-gradient(90deg, var(--pba-pink) 0%, var(--pba-blue) 50%, var(--pba-cyan) 100%); }
+        .card { background: #ffffff; border: 1px solid rgba(0,0,0,0.05); border-radius: 2rem; padding: 5rem; max-width: 85%; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.08); display: flex; flex-direction: column; align-items: center; }
+        .logos-container { display: flex; align-items: center; gap: 40px; margin-bottom: 40px; }
+        .logo-higa { height: 120px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .icon-alert { width: 100px; height: 100px; color: var(--pba-cyan); animation: pulse 2.5s infinite ease-in-out; }
         @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } }
-        h1 { font-size: 5.5rem; font-weight: 900; margin: 0 0 1.5rem; letter-spacing: -2px; text-transform: uppercase; line-height: 1; }
-        .lead { font-size: 3.5rem; font-weight: 600; color: #cbd5e1; margin: 0 0 3rem; line-height: 1.2; }
-        .sub { font-size: 2.2rem; font-weight: 500; color: #94a3b8; background: rgba(0,0,0,0.4); padding: 1.5rem 3.5rem; border-radius: 100px; display: inline-block; margin: 0; border: 1px solid rgba(255,255,255,0.05); }
-        .footer { padding: 3.5rem 5rem; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); }
-        .higa { text-align: left; }
-        .higa-title { font-size: 2.2rem; font-weight: 800; margin: 0; }
-        .higa-sub { font-size: 1.6rem; font-weight: 500; color: #94a3b8; margin: 0.5rem 0 0; }
-        .status { display: flex; align-items: center; gap: 1.5rem; background: rgba(2,132,199,0.15); border: 2px solid var(--accent); padding: 1.5rem 3rem; border-radius: 100px; }
-        .spinner { width: 32px; height: 32px; border: 4px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+        h1 { font-weight: 900; font-size: 5rem; color: #1e293b; margin: 0 0 20px 0; text-transform: uppercase; letter-spacing: -1px; }
+        p.instruccion { font-size: 3rem; font-weight: 600; color: #475569; margin: 0; line-height: 1.3; }
+        .highlight { color: var(--pba-blue); font-weight: 800; }
+        .footer { position: absolute; bottom: 0; left: 0; width: 100%; padding: 2.5rem 0; background: #ffffff; border-top: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-around; align-items: center; box-shadow: 0 -10px 20px rgba(0,0,0,0.02); }
+        .footer-text { display: flex; flex-direction: column; text-align: left; }
+        .footer-text strong { font-size: 1.8rem; color: var(--pba-blue); font-weight: 800; }
+        .footer-text span { font-size: 1.2rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        .spinner-container { display: flex; align-items: center; gap: 15px; background: rgba(65,112,153,0.05); padding: 1rem 2rem; border-radius: 50px; border: 1px solid rgba(65,112,153,0.15); }
+        .spinner { width: 24px; height: 24px; border: 3px solid rgba(65,112,153,0.2); border-top-color: var(--pba-blue); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .status-text { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.5px; }
+        .spinner-text { font-size: 1.2rem; font-weight: 700; color: var(--pba-blue); }
     </style>
 </head>
 <body>
-    <div class="top-bar"></div>
-    <div class="main">
-        <div class="card">
-            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-            <h1>SISTEMA INTERRUMPIDO</h1>
-            <p class="lead">Esté atento al llamado a viva voz<br>de los profesionales médicos</p>
-            <p class="sub">La atención a pacientes continúa con normalidad</p>
+    <div class="pba-gradient-bar"></div>
+    <div class="card">
+        <div class="logos-container">
+            <svg class="icon-alert" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <img src="logo_higa.jpg" alt="HIGA Gral San Martín" class="logo-higa" onerror="this.style.display='none'">
         </div>
+        <h1>Sistema temporalmente interrumpido</h1>
+        <p class="instruccion">Esté atento al <span class="highlight">llamado a viva voz</span> e indicaciones<br>del personal para su atención</p>
     </div>
     <div class="footer">
-        <div class="higa">
-            <p class="higa-title">HIGA Gral. San Martín</p>
-            <p class="higa-sub">Ministerio de Salud | Provincia de Buenos Aires</p>
+        <div class="footer-text">
+            <strong>HIGA Gral. San Martín</strong>
+            <span>Ministerio de Salud | Provincia de Buenos Aires</span>
         </div>
-        <div class="status">
+        <div class="spinner-container">
             <div class="spinner"></div>
-            <span class="status-text">Reconectando con HSI...</span>
+            <span class="spinner-text">Reconectando con HSI...</span>
         </div>
     </div>
 </body>
@@ -405,7 +475,7 @@ After=network.target
 [Service]
 User=$USER
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/gunicorn --workers 1 --threads 2 --bind 0.0.0.0:5000 agent:app
+ExecStart=/usr/bin/gunicorn --workers 1 --threads 3 --bind 0.0.0.0:5000 agent:app
 Restart=always
 RestartSec=3
 
@@ -448,10 +518,11 @@ EOF
 echo -e "🛡️  ${BLUE}Aplicando políticas de red (UFW)...${NC}"
 sudo ufw allow 5000/tcp comment 'Miki Web Agent'
 sudo ufw allow 5900/tcp comment 'Miki VNC'
-sudo ufw allow 22/tcp comment 'SSH'
+sudo ufw allow 22/tcp comment 'Miki SSH'
 
 echo -e "${GREEN}======================================================${NC}"
-echo -e "${GREEN} ✅ INSTALACIÓN CLEAN FINALIZADA CON ÉXITO ✅ ${NC}"
+echo -e "${GREEN} ✅ INSTALACIÓN ZERO-TOUCH FINALIZADA CON ÉXITO ✅ ${NC}"
 echo -e "${GREEN}======================================================${NC}"
-echo "El Agente ya está corriendo. Por favor, reinicia la máquina virtual para ver la pantalla."
+echo "El Agente ya está corriendo con SSH y Mantenimiento Light Mode activos."
+echo "Por favor, reinicia la máquina para aplicar todos los cambios de video."
 echo " "
