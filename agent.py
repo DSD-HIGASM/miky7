@@ -53,12 +53,13 @@ def status():
         with open(STARTUP_URL_FILE, 'r') as f: url = f.read().strip()
     except: url = "Sin Configurar"
 
-    vol = "0"
+    vol = "Err"
     try:
-        output = subprocess.check_output("amixer sget Master", shell=True).decode()
+        # Pide a ALSA todos los controles y agarra el primer porcentaje que encuentre (Master, PCM, HDMI, etc)
+        output = subprocess.check_output("amixer", shell=True).decode()
         match = re.search(r"\[(\d+)%\]", output)
         if match: vol = match.group(1)
-    except: vol = "Err"
+    except: pass
 
     return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac()})
 
@@ -111,8 +112,10 @@ def control():
             os.system(f"crontab /tmp/mycron")
             return jsonify({"status": "ok"})
             
-    elif acc == 'vol_up': run_cmd("amixer sset Master 5%+")
-    elif acc == 'vol_down': run_cmd("amixer sset Master 5%-")
+    elif acc == 'vol_up': 
+        run_cmd("amixer sset Master 5%+ || amixer sset PCM 5%+ || amixer sset HDMI 5%+")
+    elif acc == 'vol_down': 
+        run_cmd("amixer sset Master 5%- || amixer sset PCM 5%- || amixer sset HDMI 5%-")
         
     return jsonify({"status": "ok"})
 
