@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="es" class="dark">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MIKI 7 - Control Display Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: "#f0f9ff", 500: "#0ea5e9", 600: "#0284c7", 700: "#0369a1", 900: "#0c4a6e", 950: "#082f49" },
+                        surface: { light: "#f8fafc", dark: "#09090b", accent: "#18181b" },
+                    },
+                    fontFamily: { sans: ["Inter", "sans-serif"], mono: ["JetBrains Mono", "monospace"] },
+                },
+            },
+        };
+    </script>
+    <style>
+        body { transition: background-color 0.2s; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        #toast-container { display: flex; flex-direction: column-reverse; gap: 0.5rem; }
+        .online-pulse { animation: pulse-green 2s infinite; }
+        @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        .danger-pulse { animation: pulse-red 1s infinite; color: #ef4444 !important; }
+        @keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .config-active-tab { border-bottom: 2px solid #0ea5e9 !important; color: #0ea5e9 !important; }
+        .terminal-output p { margin-bottom: 0.25rem; }
+        .terminal-output .cmd { color: #3b82f6; }
+        .terminal-output .ok { color: #10b981; }
+        .terminal-output .err { color: #ef4444; }
+        .terminal-output .sys { color: #eab308; }
+    </style>
+</head>
+
+<body class="h-screen flex overflow-hidden bg-slate-50 text-slate-900 dark:bg-surface-dark dark:text-zinc-100 selection:bg-brand-500/30 font-sans text-sm">
+    <aside class="w-64 bg-white dark:bg-surface-accent border-r border-slate-200 dark:border-zinc-800 flex flex-col flex-shrink-0 z-30 shadow-lg">
+        <div class="p-5 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-start">
+            <div>
+                <h1 class="font-extrabold text-xl tracking-tighter text-brand-600 dark:text-brand-500 flex items-center gap-2">
+                    <i class="ph-fill ph-target text-2xl"></i> MIKY 7
+                </h1>
+                <p class="text-[9px] text-slate-500 dark:text-zinc-500 font-mono uppercase tracking-[0.2em] mt-1">NOC V13.2</p>
+            </div>
+            <button onclick="toggleTheme()" class="p-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:scale-110 transition-transform">
+                <i id="theme-icon" class="ph-bold ph-moon-stars text-lg text-brand-600"></i>
+            </button>
+        </div>
+        <div class="p-4 grid grid-cols-2 gap-2 border-b border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/20">
+            <div class="bg-white dark:bg-zinc-900 p-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-center">
+                <p class="text-[9px] font-bold text-slate-400 uppercase">Total</p>
+                <p id="kpi-total" class="text-lg font-black mt-0.5">0</p>
+            </div>
+            <div class="bg-white dark:bg-zinc-900 p-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-center">
+                <p class="text-[9px] font-bold text-emerald-500 uppercase">Online</p>
+                <p id="kpi-online" class="text-lg font-black mt-0.5 text-emerald-500">0</p>
+            </div>
+        </div>
+        <div class="px-5 pt-4 pb-2 text-[10px] font-black text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Sectores</div>
+        <nav class="flex-1 overflow-y-auto px-3 space-y-1 hide-scrollbar" id="sidebar-nav"></nav>
+        <div class="p-4 border-t border-slate-200 dark:border-zinc-800">
+            <button onclick="openConfig()" class="w-full bg-brand-600 hover:bg-brand-700 text-white py-2.5 rounded-xl text-xs font-bold shadow-md flex items-center justify-center gap-2">
+                <i class="ph-bold ph-gear-six text-base"></i> Administración
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <header class="h-16 border-b border-slate-200 dark:border-zinc-800 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md flex items-center justify-between px-6 z-20 sticky top-0">
+            <div class="flex items-center gap-4">
+                <h2 id="current-sector-title" class="text-lg font-extrabold text-slate-800 dark:text-zinc-50 w-32 truncate"></h2>
+                <div class="h-5 w-px bg-slate-300 dark:bg-zinc-800"></div>
+                <div class="relative group">
+                    <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Buscar equipo o IP..." class="bg-slate-100 dark:bg-zinc-900/50 border border-transparent focus:border-brand-500/50 text-xs rounded-lg pl-9 pr-3 py-1.5 w-64 outline-none" />
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="flex items-center bg-slate-100 dark:bg-zinc-900 rounded-lg p-1 border border-slate-200 dark:border-zinc-800 shadow-sm mr-2">
+                    <span class="text-[9px] font-bold text-slate-400 uppercase px-2 mr-1">Masivo:</span>
+                    <button onclick="askGlobalUrl()" class="p-1.5 rounded-md hover:bg-white dark:hover:bg-zinc-700 text-brand-600 dark:text-brand-400 transition-colors" title="Cambiar URL a Todos"><i class="ph-bold ph-globe text-base"></i></button>
+                    <button onclick="globalAction('refresh')" class="p-1.5 rounded-md hover:bg-white dark:hover:bg-zinc-700 text-slate-600 dark:text-slate-300 transition-colors" title="F5 a Todos"><i class="ph-bold ph-arrows-clockwise text-base"></i></button>
+                    <button onclick="globalAction('clear_cache')" class="p-1.5 rounded-md hover:bg-white dark:hover:bg-zinc-700 text-slate-600 dark:text-slate-300 transition-colors" title="Limpiar Caché a Todos"><i class="ph-bold ph-trash text-base"></i></button>
+                    <button onclick="globalAction('reboot')" class="p-1.5 rounded-md hover:bg-red-500 hover:text-white text-red-500 transition-colors" title="Reiniciar Todos"><i class="ph-bold ph-power text-base"></i></button>
+                </div>
+
+                <div id="sync-status" class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full text-[10px] font-bold border border-emerald-500/20">
+                    <i class="ph-bold ph-radio-button online-pulse"></i> SYNC
+                </div>
+                
+                <div class="flex bg-slate-100 dark:bg-zinc-900 p-1 rounded-lg border border-slate-200 dark:border-zinc-800 shadow-inner">
+                    <button onclick="setViewMode('grid')" id="btn-view-grid" class="p-1.5 rounded-md transition-all"><i class="ph-fill ph-grid-four text-base"></i></button>
+                    <button onclick="setViewMode('list')" id="btn-view-list" class="p-1.5 rounded-md transition-all"><i class="ph-fill ph-list-dashes text-base"></i></button>
+                </div>
+            </div>
+        </header>
+        <div class="flex-1 overflow-y-auto p-5 relative bg-slate-50 dark:bg-surface-dark" id="main-scroll-area">
+            <div id="pc-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4"></div>
+            <div id="pc-list-container" class="hidden w-full overflow-hidden rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-slate-50 dark:bg-zinc-800/50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <tr>
+                            <th class="px-4 py-3">Est</th>
+                            <th class="px-4 py-3">Terminal</th>
+                            <th class="px-4 py-3">IP / MAC</th>
+                            <th class="px-4 py-3">Acciones Rápidas</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pc-list-body" class="divide-y divide-slate-100 dark:divide-zinc-800"></tbody>
+                </table>
+            </div>
+            <div id="empty-msg" class="hidden flex-col items-center justify-center h-[60vh] opacity-40">
+                <div class="w-16 h-16 bg-slate-200 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-4"><i class="ph ph-terminal-window text-3xl"></i></div>
+                <h3 class="text-lg font-bold">Sin Equipos</h3>
+                <p class="text-slate-500 mt-1 text-xs">Añade terminales manualmente o usa Auto-Descubrir.</p>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast-container" class="fixed bottom-6 right-6 z-[100] w-80 pointer-events-none"></div>
+
+    <div id="terminalModal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4">
+        <div id="terminalBackdrop" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm opacity-0 transition-opacity"></div>
+        <div id="terminalPanel" class="relative w-full max-w-2xl bg-[#09090b] rounded-xl shadow-2xl transform scale-95 opacity-0 transition-all flex flex-col border border-zinc-800 overflow-hidden h-[500px]">
+            <div class="p-2.5 bg-zinc-900 border-b border-zinc-800 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="flex gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-red-500"></div><div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div><div class="w-2.5 h-2.5 rounded-full bg-green-500"></div></div>
+                    <span id="term-title" class="text-[11px] font-mono text-zinc-400">root@terminal</span>
+                </div>
+                <button onclick="closeModals()" class="text-zinc-500 hover:text-white"><i class="ph-bold ph-x"></i></button>
+            </div>
+            <div id="term-output" class="flex-1 p-3 font-mono text-xs overflow-y-auto terminal-output text-zinc-300"></div>
+            <div class="p-2.5 bg-black border-t border-zinc-800 flex items-center gap-2">
+                <span class="text-green-500 font-mono font-bold text-xs">higa@admin:~$</span>
+                <input type="text" id="term-input" class="flex-1 bg-transparent text-white font-mono text-xs outline-none border-none" autocomplete="off" onkeypress="handleTerminal(event)" />
+            </div>
+        </div>
+    </div>
+
+    <div id="imageModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-6">
+        <div id="imageBackdrop" class="fixed inset-0 bg-slate-950/95 backdrop-blur-xl opacity-0 transition-opacity"></div>
+        <div id="imagePanel" class="relative w-full max-w-6xl transform scale-95 opacity-0 transition-all flex flex-col h-full">
+            <div class="flex justify-between items-center mb-3 px-2">
+                <h3 id="modal-img-title" class="text-white font-bold text-base"></h3>
+                <button onclick="closeModals()" class="p-2 rounded-full bg-white/10 text-white hover:bg-white/20"><i class="ph-bold ph-x text-xl"></i></button>
+            </div>
+            <div class="flex-1 bg-black rounded-2xl overflow-hidden flex items-center justify-center border border-white/10">
+                <img id="modal-img" src="" class="max-w-full max-h-full object-contain" />
+            </div>
+        </div>
+    </div>
+
+    <div id="configModal" class="fixed inset-0 z-[50] hidden flex items-center justify-center p-4">
+        <div id="configBackdrop" class="fixed inset-0 bg-slate-900/80 dark:bg-black/90 backdrop-blur-sm opacity-0 transition-opacity"></div>
+        <div id="configPanel" class="relative w-full max-w-4xl bg-white dark:bg-surface-accent rounded-2xl shadow-2xl transform scale-95 opacity-0 transition-all flex flex-col max-h-[85vh] border border-slate-200 dark:border-zinc-800 overflow-hidden">
+            <div class="p-5 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-center bg-slate-50/50 dark:bg-zinc-900/30">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-brand-500 rounded-xl flex items-center justify-center text-white"><i class="ph-bold ph-wrench text-xl"></i></div>
+                    <h3 class="text-lg font-black text-slate-800 dark:text-white">Panel de Administración</h3>
+                </div>
+                <button onclick="closeModals()" class="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-zinc-800"><i class="ph-bold ph-x text-lg"></i></button>
+            </div>
+            <div class="flex border-b border-slate-200 dark:border-zinc-800 px-6 gap-6 overflow-x-auto hide-scrollbar text-xs">
+                <button onclick="switchTab('tab-net')" id="btn-tab-net" class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Red & Seguridad</button>
+                <button onclick="switchTab('tab-tax')" id="btn-tab-tax" class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Sectores</button>
+                <button onclick="switchTab('tab-hw')"  id="btn-tab-hw"  class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Inventario & Discovery</button>
+                <button onclick="switchTab('tab-ota')" id="btn-tab-ota" class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Despliegue OTA</button>
+                <button onclick="switchTab('tab-tg')"  id="btn-tab-tg"  class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Alertas Telegram</button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-surface-dark space-y-6 relative">
+                <div id="tab-net" class="tab-content space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+                            <label class="text-[10px] font-black text-slate-400 uppercase block mb-1">Bearer Token (Auth)</label>
+                            <input type="password" id="cfg-token" class="w-full bg-slate-100 dark:bg-black border border-transparent focus:border-brand-500 rounded-lg p-2 font-mono text-xs outline-none" />
+                        </div>
+                        <div class="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
+                            <label class="text-[10px] font-black text-slate-400 uppercase block mb-1">URL Base Hospital (Global)</label>
+                            <input type="text" id="cfg-base" class="w-full bg-slate-100 dark:bg-black border border-transparent focus:border-brand-500 rounded-lg p-2 font-mono text-xs outline-none" />
+                        </div>
+                        <div class="bg-orange-500/5 p-4 rounded-xl border border-orange-500/20 md:col-span-2">
+                            <label class="text-[10px] font-black text-orange-500 uppercase block mb-1">URL Mantenimiento Local (Offline)</label>
+                            <input type="text" id="cfg-panic" class="w-full bg-white dark:bg-black border border-orange-500/20 focus:border-orange-500 rounded-lg p-2 font-mono text-xs outline-none text-orange-600" />
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-tax" class="tab-content hidden space-y-4">
+                    <div class="flex gap-2">
+                        <input type="text" id="new-sector" placeholder="Nuevo sector..." class="flex-1 bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 focus:border-brand-500 rounded-lg px-4 text-xs outline-none" />
+                        <button onclick="addSector()" class="bg-brand-600 text-white px-6 py-2.5 rounded-lg text-xs font-bold">AÑADIR</button>
+                    </div>
+                    <ul id="list-sectores" class="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm"></ul>
+                </div>
+
+                <div id="tab-hw" class="tab-content hidden space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h4 class="text-xs font-black text-slate-400 uppercase">Terminales Físicas</h4>
+                        <div class="flex gap-2">
+                            <button onclick="startAutoDiscovery()" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5" id="btn-discover"><i class="ph-bold ph-radar"></i> AUTO-DESCUBRIR RED</button>
+                            <button onclick="addPC()" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5"><i class="ph-bold ph-plus"></i> NUEVO EQUIPO</button>
+                        </div>
+                    </div>
+                    <div id="list-equipos" class="space-y-3"></div>
+                </div>
+
+                <div id="tab-ota" class="tab-content hidden space-y-4">
+                    <div class="bg-indigo-500/10 border border-indigo-500/30 p-5 rounded-xl">
+                        <h4 class="text-sm font-black text-indigo-600 dark:text-indigo-400 flex items-center gap-2 mb-2"><i class="ph-fill ph-cloud-arrow-down"></i> Actualización OTA</h4>
+                        <label class="text-[10px] font-black text-indigo-500 uppercase block mb-1">URL Raw de GitHub (agent.py)</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="cfg-ota-url" placeholder="https://raw.githubusercontent.com/..." class="flex-1 bg-white dark:bg-black border border-indigo-500/20 focus:border-indigo-500 rounded-lg p-2.5 font-mono text-xs outline-none text-indigo-600" />
+                            <button onclick="fireOTA()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg text-xs font-bold shadow-md flex items-center gap-2"><i class="ph-bold ph-rocket-launch text-lg"></i> DEPLOY</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-tg" class="tab-content hidden space-y-4">
+                    <div class="bg-blue-500/10 border border-blue-500/30 p-5 rounded-xl">
+                        <h4 class="text-sm font-black text-blue-600 dark:text-blue-400 flex items-center gap-2 mb-1"><i class="ph-fill ph-telegram-logo"></i> Notificaciones de Caída</h4>
+                        <p class="text-xs text-slate-600 dark:text-zinc-400 mb-4 font-medium">Si el panel detecta que un equipo pierde red, enviará un aviso al Bot de Telegram.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div><label class="text-[10px] font-black text-blue-500 uppercase block mb-1">Bot Token</label><input type="password" id="cfg-tg-token" class="w-full bg-white dark:bg-black border border-blue-500/20 focus:border-blue-500 rounded-lg p-2 font-mono text-xs outline-none text-blue-600" /></div>
+                            <div><label class="text-[10px] font-black text-blue-500 uppercase block mb-1">Chat ID</label><input type="text" id="cfg-tg-chat" class="w-full bg-white dark:bg-black border border-blue-500/20 focus:border-blue-500 rounded-lg p-2 font-mono text-xs outline-none text-blue-600" /></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/50 flex justify-end gap-3">
+                <button onclick="closeModals()" class="px-5 py-2 text-xs font-bold text-slate-500 hover:text-white">DESCARTAR</button>
+                <button onclick="saveAll()" class="px-6 py-2 bg-brand-600 text-white rounded-lg text-xs font-bold shadow-md">APLICAR CAMBIOS</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let db = { masterPass: "", globalDefault: "https://llamador-shc.ms.gba.gov.ar", maintUrl: "file:///home/higa/control_remoto/mantenimiento.html", sectors: ["General"], pcs: [], tgToken: "", tgChat: "", otaUrl: "" };
+        let ui = { view: "grid", tab: "Todos", query: "", theme: "dark", isSyncing: false, activeTermPc: null };
+        let offlineCounters = {};
+
+        function init() {
+            ui.theme = localStorage.getItem("miki_theme") || "dark";
+            ui.view = localStorage.getItem("miki_view") || "grid";
+            document.documentElement.className = ui.theme;
+            const saved = localStorage.getItem("miki_v13_db") || localStorage.getItem("miki_v12_db");
+            if (saved) { try { db = { ...db, ...JSON.parse(saved) }; } catch (e) { } }
+            renderSectorsNav();
+            updateViewModeUI();
+            updateUIGrid();
+            startNetworkEngine();
+            updateThemeIcon();
+            switchTab('tab-net'); // Activa primera pestaña por defecto
+        }
+
+        const getTgTimestamp = () => new Date().toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'medium' });
+
+        function sendTelegramAlert(pcName, ip, pcSector) {
+            if (!db.tgToken || !db.tgChat) return;
+            const msg = `🚨 <b>ALERTA CRÍTICA: LLAMADOR OFFLINE</b> 🚨\n\n⚠️ <i>Se ha perdido la conexión de red.</i>\n\n📍 <b>Sector:</b> ${pcSector}\n🖥️ <b>Equipo:</b> ${pcName}\n🌐 <b>IP LAN:</b> <code>${ip}</code>\n🕒 <b>Hora:</b> ${getTgTimestamp()}`;
+            fetch(`https://api.telegram.org/bot${db.tgToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: db.tgChat, text: msg, parse_mode: 'HTML' }) }).catch(() => { });
+        }
+
+        function sendTelegramRecoveryAlert(pcName, ip, pcSector) {
+            if (!db.tgToken || !db.tgChat) return;
+            const msg = `✅ <b>SISTEMA RESTAURADO: ONLINE</b> ✅\n\n🔄 <i>La terminal recuperó la conexión.</i>\n\n📍 <b>Sector:</b> ${pcSector}\n🖥️ <b>Equipo:</b> ${pcName}\n🌐 <b>IP LAN:</b> <code>${ip}</code>\n🕒 <b>Hora:</b> ${getTgTimestamp()}`;
+            fetch(`https://api.telegram.org/bot${db.tgToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: db.tgChat, text: msg, parse_mode: 'HTML' }) }).catch(() => { });
+        }
+
+        async function startAutoDiscovery() {
+            const baseIp = prompt("Ingresa los 3 primeros octetos de tu red LAN (Ejemplo: 192.168.1):", "192.168.1");
+            if (!baseIp) return;
+            document.getElementById("btn-discover").innerHTML = '<i class="ph-bold ph-spinner-gap spinner"></i> ESCANEANDO...';
+            let foundCount = 0;
+            showToast(`Escaneando red ${baseIp}.0/24...`, "info");
+            const checks = [];
+            for (let i = 1; i <= 254; i++) {
+                const ip = `${baseIp}.${i}`;
+                if (db.pcs.find((p) => p.ip === ip)) continue;
+                const ctrl = new AbortController();
+                const tid = setTimeout(() => ctrl.abort(), 1500);
+                checks.push(
+                    fetch(`http://${ip}:5000/status`, { signal: ctrl.signal }).then(async (r) => {
+                        clearTimeout(tid);
+                        if (r.ok) {
+                            const data = await r.json();
+                            db.pcs.push({ id: Date.now() + i, name: `Terminal EXO Detectada`, ip: ip, mac: data.mac || "", sector: db.sectors[0] });
+                            foundCount++;
+                        }
+                    }).catch(() => { }),
+                );
+            }
+            await Promise.allSettled(checks);
+            document.getElementById("btn-discover").innerHTML = '<i class="ph-bold ph-radar"></i> AUTO-DESCUBRIR RED';
+            renderPCList();
+            showToast(`Búsqueda finalizada. ${foundCount} terminales nuevas.`, "success");
+        }
+
+        async function startNetworkEngine() { if (ui.isSyncing) return; ui.isSyncing = true; syncLoop(); }
+
+        async function syncLoop() {
+            let online = 0;
+            const syncIcon = document.querySelector("#sync-status i");
+            if (syncIcon) syncIcon.className = "ph-bold ph-arrows-clockwise spinner text-brand-500";
+            for (let pc of db.pcs) {
+                if (!pc.ip) continue;
+                try {
+                    const ctrl = new AbortController();
+                    const tid = setTimeout(() => ctrl.abort(), 1800);
+                    const res = await fetch(`http://${pc.ip}:5000/status`, { signal: ctrl.signal });
+                    clearTimeout(tid);
+                    if (res.ok) {
+                        online++;
+                        const data = await res.json();
+                        pc.mac = data.mac;
+                        updatePCStatus(pc.id, true, data);
+                        if (offlineCounters[pc.id] >= 6) {
+                            sendTelegramRecoveryAlert(pc.name, pc.ip, pc.sector);
+                            showToast(`Recuperado: ${pc.name}.`, "success");
+                        }
+                        offlineCounters[pc.id] = 0;
+                    } else throw Error();
+                } catch (e) {
+                    updatePCStatus(pc.id, false);
+                    offlineCounters[pc.id] = (offlineCounters[pc.id] || 0) + 1;
+                    if (offlineCounters[pc.id] === 6) {
+                        sendTelegramAlert(pc.name, pc.ip, pc.sector);
+                        showToast(`Caída: ${pc.name}.`, "warning");
+                    }
+                }
+            }
+            document.getElementById("kpi-total").innerText = db.pcs.length;
+            document.getElementById("kpi-online").innerText = online;
+            if (syncIcon) syncIcon.className = "ph-bold ph-check-circle text-emerald-500";
+            setTimeout(syncLoop, 5000);
+        }
+
+        function updatePCStatus(id, isOnline, meta = null) {
+            const gridDot = document.getElementById(`dot-${id}`), gridVol = document.getElementById(`vol-${id}`), gridCpu = document.getElementById(`cpu-${id}`), gridUrl = document.getElementById(`url-${id}`), btnWol = document.getElementById(`wol-btn-${id}`);
+            if (gridDot) {
+                gridDot.className = isOnline ? "w-2.5 h-2.5 rounded-full bg-emerald-500 online-pulse shadow-[0_0_8px_#10b981]" : "w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-zinc-800";
+                if (btnWol) btnWol.style.display = isOnline ? "none" : "flex";
+                if (meta) {
+                    gridVol.innerText = `${meta.vol}%`; gridUrl.innerText = meta.url;
+                    const cpuVal = Math.round(meta.cpu); gridCpu.innerText = `${cpuVal}%`;
+                    if (cpuVal > 85) gridCpu.classList.add("danger-pulse"); else gridCpu.classList.remove("danger-pulse");
+                }
+            }
+        }
+
+        const headers = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${db.masterPass}` });
+
+        async function sendCommand(pcId, action, params = {}, silent = false) {
+            const pc = db.pcs.find((p) => p.id == pcId);
+            if (!pc || !pc.ip) return false;
+            const endpoint = action === "startup" ? "set_startup" : "control";
+            const body = action === "startup" ? { url: params.url } : { accion: action };
+            Object.assign(body, params);
+            try {
+                const res = await fetch(`http://${pc.ip}:5000/${endpoint}`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+                if (res.ok) {
+                    if (!silent) showToast(`Éxito en ${pc.name}: ${action}`, "success");
+                    if (["startup", "refresh", "clear_cache"].includes(action)) setTimeout(() => takeScreenshot(pcId), 4000);
+                    return true;
+                } else {
+                    if (!silent) showToast(`Error Auth en ${pc.name}`, "error"); return false;
+                }
+            } catch (e) {
+                if (!silent) showToast(`Terminal ${pc.name} offline`, "error"); return false;
+            }
+        }
+
+        // ACCIONES GLOBALES MASIVAS
+        function globalAction(action) {
+            let names = { 'refresh': 'Recargar Pantallas', 'clear_cache': 'Limpiar Caché', 'reboot': 'Reiniciar Hardware' };
+            if(!confirm(`⚠️ ATENCIÓN ⚠️\n¿Ejecutar '${names[action]}' en TODOS los equipos del hospital?`)) return;
+            db.pcs.forEach(pc => sendCommand(pc.id, action, {}, true));
+            showToast(`Comando masivo disparado a la red.`, "info");
+        }
+
+        function askGlobalUrl() {
+            const url = prompt("CAMBIO MASIVO DE URL\nIngrese la URL que se aplicará a todas las terminales encendidas:", db.globalDefault);
+            if(url && confirm("¿Está seguro de enviar esta página a TODOS los equipos ahora?")) {
+                db.globalDefault = url;
+                localStorage.setItem("miki_v13_db", JSON.stringify(db));
+                db.pcs.forEach(pc => sendCommand(pc.id, "startup", {url: url}, true));
+                showToast("URL global enviada a la red.", "success");
+            }
+        }
+
+        function askIndividualUrl(pcId) {
+            const pc = db.pcs.find(p => p.id == pcId);
+            const url = prompt(`Cambiar URL en ${pc.name}:\n(Puede ser una agenda específica)`, "");
+            if(url) {
+                sendCommand(pcId, 'startup', {url: url}, false);
+            }
+        }
+
+        async function triggerWakeOnLan(deadPcId) {
+            const deadPc = db.pcs.find((p) => p.id == deadPcId);
+            if (!deadPc.mac || deadPc.mac === "00:00:00:00:00:00") { showToast("MAC no registrada.", "error"); return; }
+            const alivePc = db.pcs.find((p) => p.id != deadPcId && offlineCounters[p.id] === 0);
+            if (!alivePc) { showToast("No hay equipos encendidos para usar de puente.", "error"); return; }
+            showToast(`Puenteando a través de ${alivePc.name}...`, "info");
+            sendCommand(alivePc.id, "wol", { mac: deadPc.mac }, true);
+        }
+
+        function askCronSchedule(pcId) {
+            const on_t = prompt("RUTINA CRON\nHora de ENCENDIDO (HH:MM):", "06:00"); if (!on_t) return;
+            const off_t = prompt("Hora de APAGADO (HH:MM):", "20:00"); if (!off_t) return;
+            sendCommand(pcId, "schedule_power", { on_time: on_t, off_time: off_t });
+        }
+
+        async function takeScreenshot(pcId) {
+            const pc = db.pcs.find((p) => p.id == pcId);
+            const icon = document.getElementById(`cam-${pcId}`);
+            if (icon) icon.className = "ph-bold ph-circle-notch spinner";
+            try {
+                const res = await fetch(`http://${pc.ip}:5000/screenshot?t=${Date.now()}`, { headers: headers() });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.image) {
+                        const img = document.getElementById(`img-${pcId}`);
+                        if (img) { img.src = `data:image/png;base64,${data.image}`; img.classList.replace("opacity-40", "opacity-90"); }
+                    }
+                }
+            } catch (e) { } finally { if (icon) icon.className = "ph-bold ph-camera-plus text-base"; }
+        }
+
+        async function fireOTA() {
+            const url = document.getElementById("cfg-ota-url").value.trim();
+            if (!url.includes("raw.githubusercontent")) { showToast("Debe ser URL Raw de GitHub", "error"); return; }
+            if (!confirm(`¿Desplegar nueva versión en ${db.pcs.length} equipos?`)) return;
+            db.otaUrl = url; localStorage.setItem("miki_v13_db", JSON.stringify(db));
+            showToast("Pipeline OTA Iniciado...", "info");
+            for (let pc of db.pcs) await sendCommand(pc.id, "update_agent", { url: url }, true);
+            showToast("OTA finalizado.", "success");
+        }
+
+        function openTerminal(pcId) {
+            ui.activeTermPc = db.pcs.find((p) => p.id == pcId);
+            document.getElementById("term-title").innerText = `root@${ui.activeTermPc.ip}`;
+            document.getElementById("term-output").innerHTML = `<p class="sys">Miki SSH v13.2</p><p class="sys">cmd: refresh, clear_cache, reboot, vol_up, vol_down, sleep_screen, wake_screen</p>`;
+            openModals("terminalModal", "terminalPanel", "terminalBackdrop");
+            setTimeout(() => document.getElementById("term-input").focus(), 100);
+        }
+
+        async function handleTerminal(e) {
+            if (e.key === "Enter") {
+                const inp = document.getElementById("term-input"); const cmd = inp.value.trim().toLowerCase(); const out = document.getElementById("term-output");
+                if (!cmd) return;
+                out.innerHTML += `<p><span class="text-green-500 font-bold">higa@admin:~$</span> <span class="cmd">${cmd}</span></p>`; inp.value = "";
+                const valid = ["refresh", "clear_cache", "reboot", "vol_up", "vol_down", "sleep_screen", "wake_screen"];
+                if (cmd === "clear") out.innerHTML = "";
+                else if (valid.includes(cmd)) { const ok = await sendCommand(ui.activeTermPc.id, cmd, {}, true); out.innerHTML += ok ? `<p class="ok">-> OK</p>` : `<p class="err">-> FALLÓ</p>`; }
+                else out.innerHTML += `<p class="err">-bash: ${cmd}: command not found</p>`;
+                out.scrollTop = out.scrollHeight;
+            }
+        }
+
+        function updateUIGrid() {
+            const grid = document.getElementById("pc-grid"); const list = document.getElementById("pc-list-body");
+            grid.innerHTML = ""; list.innerHTML = "";
+            let filtered = ui.tab === "Todos" ? db.pcs : db.pcs.filter((p) => p.sector === ui.tab);
+            if (ui.query) filtered = filtered.filter((p) => p.name.toLowerCase().includes(ui.query) || p.ip.includes(ui.query));
+            document.getElementById("empty-msg").style.display = filtered.length ? "none" : "flex";
+
+            filtered.forEach((pc) => {
+                grid.innerHTML += `
+                <div class="bg-white dark:bg-surface-accent border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden flex flex-col shadow-sm group relative">
+                    <button onclick="openTerminal('${pc.id}')" class="absolute top-2 left-2 z-10 bg-black/60 hover:bg-black text-green-400 p-1.5 rounded-lg backdrop-blur font-mono text-[10px] opacity-0 group-hover:opacity-100 transition-opacity border border-white/10" title="Terminal SSH">&gt;_</button>
+                    <div class="p-3 border-b border-slate-100 dark:border-zinc-800/50 flex justify-between items-center bg-slate-50/30 dark:bg-zinc-900/30">
+                        <div class="flex items-center gap-2.5 ml-8">
+                            <div id="dot-${pc.id}" class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-zinc-700 shrink-0"></div>
+                            <div class="truncate max-w-[110px]"><h5 class="font-black text-xs truncate">${pc.name}</h5><p class="text-[9px] text-slate-500 font-mono">${pc.ip}</p></div>
+                        </div>
+                        <div class="flex gap-1.5 shrink-0">
+                            <div class="flex items-center gap-1 bg-white dark:bg-black px-1.5 py-1 rounded-md border border-slate-200 dark:border-zinc-800"><i class="ph-bold ph-speaker-high text-amber-500 text-[10px]"></i><span id="vol-${pc.id}" class="text-[9px] font-bold w-4 text-center">--</span></div>
+                            <div class="flex items-center gap-1 bg-white dark:bg-black px-1.5 py-1 rounded-md border border-slate-200 dark:border-zinc-800"><i class="ph-bold ph-cpu text-brand-500 text-[10px]"></i><span id="cpu-${pc.id}" class="text-[9px] font-bold w-4 text-center">--</span></div>
+                        </div>
+                    </div>
+                    <div class="relative bg-black h-36 flex items-center justify-center cursor-zoom-in overflow-hidden group/img" onclick="openImageModal('${pc.id}')">
+                        <img id="img-${pc.id}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="max-w-full max-h-full object-contain opacity-40">
+                        <span id="url-${pc.id}" class="absolute bottom-2 left-2 text-[8px] text-white/70 font-mono bg-black/60 px-2 py-1 rounded-md max-w-[90%] truncate">Conectando...</span>
+                        <div class="absolute inset-0 bg-black/80 hidden flex-col items-center justify-center backdrop-blur-sm z-20" id="wol-btn-${pc.id}">
+                            <button onclick="event.stopPropagation(); triggerWakeOnLan('${pc.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-lg">WAKE ON LAN</button>
+                        </div>
+                        <button onclick="event.stopPropagation(); takeScreenshot('${pc.id}')" class="absolute top-2 right-2 bg-white/10 hover:bg-white/30 p-2 rounded-lg text-white opacity-0 group-hover/img:opacity-100 transition-all z-10"><i id="cam-${pc.id}" class="ph-bold ph-camera-plus text-base"></i></button>
+                    </div>
+                    <div class="p-3 flex flex-col gap-2 bg-slate-50 dark:bg-zinc-900/50">
+                        <div class="flex justify-between gap-1">
+                            <div class="flex bg-white dark:bg-black rounded-lg border border-slate-200 dark:border-zinc-800 shrink-0">
+                                <button onclick="sendCommand('${pc.id}','vol_down')" class="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-l-lg text-slate-500 hover:text-brand-500"><i class="ph-bold ph-minus text-xs"></i></button>
+                                <button onclick="sendCommand('${pc.id}','vol_up')" class="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-r-lg text-slate-500 hover:text-brand-500 border-l border-slate-200 dark:border-zinc-800"><i class="ph-bold ph-plus text-xs"></i></button>
+                            </div>
+                            
+                            <button onclick="sendCommand('${pc.id}','refresh')" class="flex-1 bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 hover:border-brand-500 text-slate-700 dark:text-zinc-300 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center gap-1" title="F5"><i class="ph-bold ph-arrows-clockwise text-xs"></i></button>
+                            
+                            <button onclick="askIndividualUrl('${pc.id}')" class="w-8 bg-brand-50 dark:bg-brand-900/20 text-brand-600 border border-brand-200 dark:border-brand-800 hover:bg-brand-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Forzar URL Específica"><i class="ph-bold ph-link text-xs"></i></button>
+                        </div>
+                        <div class="flex justify-between gap-1">
+                            <button onclick="askCronSchedule('${pc.id}')" class="flex-1 bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 hover:text-purple-500 text-slate-500 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center gap-1 h-7" title="Horarios de Encendido"><i class="ph-bold ph-clock text-xs"></i> CRON</button>
+                            <button onclick="sendCommand('${pc.id}','startup',{url: db.maintUrl})" class="w-8 h-7 bg-orange-500/10 text-orange-600 border border-orange-500/20 hover:bg-orange-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Mantenimiento"><i class="ph-fill ph-warning text-sm"></i></button>
+                            <button onclick="sendCommand('${pc.id}','reboot',{},true)" class="w-8 h-7 bg-red-500/10 text-red-600 border border-red-500/20 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Reiniciar Hard"><i class="ph-bold ph-power text-sm"></i></button>
+                        </div>
+                    </div>
+                </div>`;
+
+                list.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-zinc-800/30 transition-colors"><td class="px-4 py-3"><div id="ldot-${pc.id}" class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-zinc-800"></div></td><td class="px-4 py-3 font-black text-xs text-slate-800 dark:text-zinc-200">${pc.name}</td><td class="px-4 py-3"><div class="font-mono text-[10px] text-slate-500">${pc.ip}</div><div class="font-mono text-[9px] text-slate-400">${pc.mac || "--"}</div></td><td class="px-4 py-3"><div class="flex gap-1.5"><button onclick="askIndividualUrl('${pc.id}')" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-brand-500"><i class="ph-bold ph-link text-sm"></i></button><button onclick="sendCommand('${pc.id}','reboot',{},true)" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-red-500"><i class="ph-bold ph-power text-sm"></i></button><button onclick="openTerminal('${pc.id}')" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-emerald-500"><i class="ph-bold ph-terminal-window text-sm"></i></button></div></td></tr>`;
+            });
+        }
+
+        function setTab(name) { ui.tab = name; renderSectorsNav(); updateUIGrid(); }
+        function handleSearch() { ui.query = document.getElementById("searchInput").value.toLowerCase(); updateUIGrid(); }
+        
+        function renderSectorsNav() {
+            const nav = document.getElementById("sidebar-nav"); if (!nav) return;
+            nav.innerHTML = ["Todos", ...db.sectors.sort()].map((s) => {
+                const act = ui.tab === s; const c = s === "Todos" ? db.pcs.length : db.pcs.filter((p) => p.sector === s).length;
+                return `<button onclick="setTab('${s}')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex justify-between items-center ${act ? "bg-brand-500 text-white" : "text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800"}"><span>${s}</span><span class="text-[9px] px-1.5 py-0.5 rounded-md ${act ? "bg-brand-700" : "bg-slate-200 dark:bg-zinc-900"}">${c}</span></button>`;
+            }).join("");
+            const titleEl = document.getElementById("current-sector-title"); if (titleEl) titleEl.innerText = ui.tab === "Todos" ? "Infraestructura" : ui.tab;
+        }
+
+        function toggleTheme() { ui.theme = ui.theme === "dark" ? "light" : "dark"; document.documentElement.className = ui.theme; localStorage.setItem("miki_theme", ui.theme); updateThemeIcon(); }
+        function updateThemeIcon() { const icon = document.getElementById("theme-icon"); if (icon) icon.className = ui.theme === "dark" ? "ph-bold ph-sun text-base text-amber-400" : "ph-bold ph-moon-stars text-base text-indigo-500"; }
+        function setViewMode(mode) { ui.view = mode; localStorage.setItem("miki_view", mode); updateViewModeUI(); updateUIGrid(); }
+        function updateViewModeUI() {
+            const gridBtn = document.getElementById("btn-view-grid"), listBtn = document.getElementById("btn-view-list"), gridView = document.getElementById("pc-grid"), listView = document.getElementById("pc-list-container");
+            if (ui.view === "grid") { gridBtn.className = "p-1.5 rounded-md bg-white dark:bg-zinc-700 text-brand-600 shadow-sm"; listBtn.className = "p-1.5 rounded-md text-slate-400 hover:text-slate-600"; gridView.classList.remove("hidden"); listView.classList.add("hidden"); } 
+            else { listBtn.className = "p-1.5 rounded-md bg-white dark:bg-zinc-700 text-brand-600 shadow-sm"; gridBtn.className = "p-1.5 rounded-md text-slate-400 hover:text-slate-600"; listView.classList.remove("hidden"); gridView.classList.add("hidden"); }
+        }
+
+        function showToast(msg, type = "info") {
+            const c = document.getElementById("toast-container"); const t = document.createElement("div");
+            const bg = { success: "bg-emerald-600", error: "bg-red-600", info: "bg-brand-600", warning: "bg-orange-500" };
+            t.className = `flex items-center gap-3 px-4 py-3 rounded-xl text-white font-bold text-xs shadow-xl transition-all duration-300 translate-x-10 opacity-0 ${bg[type]}`;
+            t.innerHTML = `<span>${msg}</span>`; c.appendChild(t);
+            setTimeout(() => t.classList.remove("translate-x-10", "opacity-0"), 10);
+            setTimeout(() => { t.classList.add("translate-x-10", "opacity-0"); setTimeout(() => t.remove(), 300); }, 3000);
+        }
+
+        function openModals(i, p, b) { document.getElementById(i).classList.remove("hidden"); setTimeout(() => { document.getElementById(b).classList.replace("opacity-0", "opacity-100"); document.getElementById(p).classList.replace("scale-95", "scale-100"); document.getElementById(p).classList.replace("opacity-0", "opacity-100"); }, 10); }
+        function closeModals() { ["config", "image", "terminal"].forEach((m) => { const w = document.getElementById(`${m}Modal`), p = document.getElementById(`${m}Panel`), b = document.getElementById(`${m}Backdrop`); if (w && !w.classList.contains("hidden")) { b.classList.replace("opacity-100", "opacity-0"); p.classList.replace("scale-100", "scale-95"); p.classList.replace("opacity-100", "opacity-0"); setTimeout(() => w.classList.add("hidden"), 200); } }); }
+
+        function openConfig() { document.getElementById("cfg-token").value = db.masterPass; document.getElementById("cfg-base").value = db.globalDefault; document.getElementById("cfg-panic").value = db.maintUrl; document.getElementById("cfg-tg-token").value = db.tgToken; document.getElementById("cfg-tg-chat").value = db.tgChat; document.getElementById("cfg-ota-url").value = db.otaUrl || ""; renderTaxList(); renderPCList(); openModals("configModal", "configPanel", "configBackdrop"); }
+        function switchTab(id) { document.querySelectorAll(".tab-content").forEach((c) => c.classList.add("hidden")); document.getElementById(id).classList.remove("hidden"); document.querySelectorAll(".config-tab-btn").forEach((b) => b.classList.remove("config-active-tab")); document.getElementById(`btn-${id}`).classList.add("config-active-tab"); }
+
+        function saveAll() { db.masterPass = document.getElementById("cfg-token").value.trim(); db.globalDefault = document.getElementById("cfg-base").value.trim(); db.maintUrl = document.getElementById("cfg-panic").value.trim(); db.tgToken = document.getElementById("cfg-tg-token").value.trim(); db.tgChat = document.getElementById("cfg-tg-chat").value.trim(); db.otaUrl = document.getElementById("cfg-ota-url").value.trim(); localStorage.setItem("miki_v13_db", JSON.stringify(db)); renderSectorsNav(); updateUIGrid(); closeModals(); showToast("Configuración Guardada", "success"); }
+
+        function renderTaxList() { document.getElementById("list-sectores").innerHTML = db.sectors.map((s) => `<li class="flex justify-between items-center p-3 font-bold border-b border-slate-100 dark:border-zinc-800 last:border-0"><span>${s}</span><button onclick="db.sectors=db.sectors.filter(x=>x!=='${s}');renderTaxList()" class="text-red-500 hover:text-red-700 bg-red-500/10 p-1.5 rounded-md">Eliminar</button></li>`).join(""); }
+        function addSector() { const v = document.getElementById("new-sector").value.trim(); if (v && !db.sectors.includes(v)) { db.sectors.push(v); document.getElementById("new-sector").value = ""; renderTaxList(); } }
+        
+        function renderPCList() {
+            const sectorOpts = db.sectors.map((s) => `<option value="${s}">${s}</option>`).join("");
+            document.getElementById("list-equipos").innerHTML = db.pcs.map((pc, i) => `<div class="bg-white dark:bg-zinc-900 p-3 mb-3 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm relative"><button onclick="db.pcs.splice(${i},1);renderPCList()" class="absolute top-3 right-3 text-red-500 hover:text-red-700 bg-red-500/10 p-1.5 rounded-md text-[10px] font-bold">Quitar</button><div class="grid grid-cols-1 md:grid-cols-4 gap-3 mr-16"><div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">Nombre</label><input value="${pc.name}" onchange="db.pcs[${i}].name=this.value" class="w-full bg-slate-100 dark:bg-black p-2 rounded-lg border border-transparent focus:border-brand-500 outline-none text-xs"></div><div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">IP LAN</label><input value="${pc.ip}" onchange="db.pcs[${i}].ip=this.value" class="w-full bg-slate-100 dark:bg-black p-2 rounded-lg border border-transparent focus:border-brand-500 outline-none text-xs font-mono"></div><div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">MAC</label><input value="${pc.mac || ""}" disabled class="w-full bg-slate-200 dark:bg-zinc-800 p-2 rounded-lg border border-transparent outline-none text-xs font-mono text-slate-500"></div><div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">Sector</label><select onchange="db.pcs[${i}].sector=this.value" class="w-full bg-slate-100 dark:bg-black p-2 rounded-lg border border-transparent focus:border-brand-500 outline-none text-xs"><option hidden>${pc.sector}</option>${sectorOpts}</select></div></div></div>`).join("");
+        }
+        function addPC() { db.pcs.push({ id: Date.now(), name: "Nueva Terminal", ip: "", mac: "", sector: db.sectors[0] }); renderPCList(); }
+        function openImageModal(id) { const img = document.getElementById(`img-${id}`); if (img) { document.getElementById("modal-img").src = img.src; openModals("imageModal", "imagePanel", "imageBackdrop"); } }
+
+        init();
+    </script>
+</body>
+</html>
