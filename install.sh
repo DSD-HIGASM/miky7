@@ -75,7 +75,7 @@ STARTUP_FILE="$HOME/kiosko_startup.url"
 if [ -f "$STARTUP_FILE" ]; then
     TARGET_URL=$(cat "$STARTUP_FILE")
 else
-    TARGET_URL="https://google.com"
+    TARGET_URL="https://llamador-shc.ms.gba.gov.ar"
 fi
 pkill chromium
 pkill chrome
