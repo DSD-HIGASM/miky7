@@ -6,76 +6,64 @@ from config import BACKEND_TOKEN
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # =================================================================
-# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS (Text-To-Speech) V1.4
+# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS (Arquitectura Backend) V2.0
 # =================================================================
 def setup_tts_extension():
     home = os.path.expanduser("~")
     tts_dir = os.path.join(home, "control_remoto", "miki_tts")
-    
     os.makedirs(tts_dir, exist_ok=True)
     
-    # 1. Instalar motor de voz nativo de Linux silenciosamente (Por si no lo tiene)
-    os.system("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y espeak speech-dispatcher > /dev/null 2>&1")
+    # Instalamos el motor de voz nativo a nivel de sistema operativo
+    os.system("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y espeak > /dev/null 2>&1")
     
-    manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "1.4", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
+    manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "2.0", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
     
+    # La extensión ahora solo lee y envía a Python, no intenta hablar por el navegador
     content_js = """let ultimoLlamado = "";
-
-    const hablar = (texto) => {
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-            let msg = new SpeechSynthesisUtterance(texto);
-            msg.lang = 'es-AR';
-            msg.rate = 0.85; // Voz calmada
-            window.speechSynthesis.speak(msg);
-        }
-    };
-
-    // BUCLE INVULNERABLE: Escanea la pantalla cada 1 segundo sin importar cómo mute el DOM
     setInterval(() => {
-        let parrafos = Array.from(document.querySelectorAll('p'));
-        
-        // Buscamos el ancla exacta que no cambia
-        let nodoAlerta = parrafos.find(p => p.innerText.trim().toLowerCase() === 'último llamado');
-        if (!nodoAlerta) return;
+        // Anclaje infalible: Buscamos el logo de la campanita
+        let imgAlerta = document.querySelector('img[alt="Logo último llamado"]');
+        if (!imgAlerta) return;
 
-        // Subimos hasta atrapar la tarjeta completa que titila
-        let bloqueTurno = nodoAlerta.closest('.chakra-stack') || nodoAlerta.parentElement.parentElement;
-        
-        let nodoH1 = bloqueTurno.querySelector('h1');
+        // Subimos hasta la tarjeta contenedora
+        let bloqueTurno = imgAlerta.closest('.chakra-stack.blink') || imgAlerta.parentElement.parentElement;
+        if (!bloqueTurno) return;
+
+        let nodoH1 = bloqueTurno.querySelector('h1.chakra-heading');
         if (!nodoH1) return;
-        
+
         let paciente = nodoH1.innerText.trim();
-        let parrafosBloque = Array.from(bloqueTurno.querySelectorAll('p'));
+        let parrafos = Array.from(bloqueTurno.querySelectorAll('p.chakra-text'));
         
-        // Buscar el destino inteligentemente
-        let nodoDestino = parrafosBloque.find(p => 
+        let nodoDestino = parrafos.find(p => 
             p.innerText.toLowerCase().includes('consultorio') || 
             p.innerText.toLowerCase().includes('triage') || 
             p.innerText.toLowerCase().includes('box')
         );
-        
         let destino = nodoDestino ? nodoDestino.innerText.trim() : "";
 
-        // Si el H1 es temporal, atrapamos el párrafo que está arriba del consultorio
         if (paciente === "PACIENTE TEMPORAL" && nodoDestino) {
-            let idx = parrafosBloque.indexOf(nodoDestino);
-            if (idx > 0) {
-                paciente = parrafosBloque[idx - 1].innerText.trim();
-            }
+            let idx = parrafos.indexOf(nodoDestino);
+            if (idx > 0) paciente = parrafos[idx - 1].innerText.trim();
         }
 
-        // Si la lectura es válida y no es un duplicado, disparamos
         if (paciente && destino && paciente !== "PACIENTE TEMPORAL") {
             let idLlamado = paciente + destino;
             
             if (idLlamado !== ultimoLlamado) {
                 ultimoLlamado = idLlamado;
                 let destinoHablado = destino.replace('-', ' ');
-                hablar(`Atención. Paciente ${paciente}, por favor dirigirse a ${destinoHablado}`);
+                let textoHablado = `Atención. Paciente ${paciente}, por favor dirigirse a ${destinoHablado}`;
+                
+                // Enviamos el texto al agente Python local (puerto 5000)
+                fetch('http://127.0.0.1:5000/speak', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ texto: textoHablado })
+                }).catch(e => console.log("Error enviando al backend TTS"));
             }
         }
-    }, 1000); // 1000 milisegundos = 1 escaneo por segundo
+    }, 1000);
     """
     
     with open(os.path.join(tts_dir, "manifest.json"), "w") as f: f.write(manifest)
@@ -93,6 +81,7 @@ try:
 except Exception as e:
     logging.error(f"Fallo en TTS setup: {e}")
 # =================================================================
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -131,8 +120,24 @@ def send_wol(macaddress):
         sock.sendto(data, ('255.255.255.255', 9))
         return True
     except Exception as e:
-        logging.error(f"Error WoL: {e}")
         return False
+
+# ----- NUEVO ENDPOINT PARA RECIBIR AUDIO DESDE LA EXTENSIÓN -----
+@app.route('/speak', methods=['POST'])
+def speak():
+    # Solo acepta peticiones de la propia máquina (seguridad)
+    if request.remote_addr not in ['127.0.0.1', 'localhost']:
+        if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
+    
+    texto = request.json.get('texto', '')
+    if texto:
+        # Sanitizar para evitar inyección de comandos
+        texto_limpio = texto.replace("'", "").replace('"', "")
+        # Ejecutar espeak (Voz en español latino, velocidad 140)
+        run_cmd(f"espeak -v es-la -s 140 '{texto_limpio}'")
+        
+    return jsonify({"status": "ok"})
+# ----------------------------------------------------------------
 
 @app.route('/status', methods=['GET'])
 def status():
@@ -179,7 +184,7 @@ def control():
         target_mac = request.json.get('mac')
         if target_mac:
             send_wol(target_mac)
-            return jsonify({"status": "ok", "msg": f"WoL enviado a {target_mac}"})
+            return jsonify({"status": "ok"})
     elif acc == 'sleep_screen': run_cmd("xset dpms force off")
     elif acc == 'wake_screen': run_cmd("xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0")
     elif acc == 'schedule_power':
