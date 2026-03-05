@@ -6,56 +6,79 @@ from config import BACKEND_TOKEN
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # =================================================================
-# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS (Text-To-Speech)
+# INYECCIÓN AUTOMÁTICA OTA: MIKI TTS (Text-To-Speech) V1.2
 # =================================================================
 def setup_tts_extension():
     home = os.path.expanduser("~")
     tts_dir = os.path.join(home, "control_remoto", "miki_tts")
     
-    if not os.path.exists(tts_dir):
-        logging.info("Instalando módulo TTS vía OTA...")
-        os.makedirs(tts_dir, exist_ok=True)
-        
-        manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "1.0", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
-        
-        content_js = """let ultimoLlamado = "";
-        const hablar = (texto) => {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                let msg = new SpeechSynthesisUtterance(texto);
-                msg.lang = 'es-AR';
-                msg.rate = 0.85;
-                window.speechSynthesis.speak(msg);
-            }
-        };
-        const observar = new MutationObserver(() => {
-            let nodoPaciente = document.querySelector('h1.chakra-heading');
-            if (nodoPaciente) {
-                let paciente = nodoPaciente.innerText.trim();
-                let parrafos = Array.from(document.querySelectorAll('p.chakra-text'));
-                let nodoDestino = parrafos.find(p => p.innerText.toLowerCase().includes('consultorio') || p.innerText.toLowerCase().includes('triage') || p.innerText.toLowerCase().includes('box'));
-                let destino = nodoDestino ? nodoDestino.innerText.trim() : "su consultorio asignado";
-                let idLlamado = paciente + destino;
-                
-                if (paciente !== "" && idLlamado !== ultimoLlamado && paciente !== "PACIENTE TEMPORAL") {
-                    ultimoLlamado = idLlamado;
-                    setTimeout(() => hablar(`Atención. Paciente ${paciente}, por favor dirigirse a ${destino}`), 1500);
-                }
-            }
-        });
-        observar.observe(document.body, { childList: true, subtree: true });"""
-        
-        with open(os.path.join(tts_dir, "manifest.json"), "w") as f: f.write(manifest)
-        with open(os.path.join(tts_dir, "content.js"), "w") as f: f.write(content_js)
+    os.makedirs(tts_dir, exist_ok=True)
+    
+    manifest = '{"manifest_version": 3, "name": "Miki HSI TTS", "version": "1.2", "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"]}]}'
+    
+    content_js = """let ultimoLlamado = "";
+    const hablar = (texto) => {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            let msg = new SpeechSynthesisUtterance(texto);
+            msg.lang = 'es-AR';
+            msg.rate = 0.85;
+            window.speechSynthesis.speak(msg);
+        }
+    };
+
+    const observar = new MutationObserver(() => {
+        // 1. Encontrar el texto "Último llamado" para anclar la búsqueda
+        let parrafos = Array.from(document.querySelectorAll('p'));
+        let nodoAlerta = parrafos.find(p => p.innerText.trim().toLowerCase() === 'último llamado');
+
+        let bloqueTurno = document; // Fallback al documento completo
+        if (nodoAlerta && nodoAlerta.parentElement && nodoAlerta.parentElement.parentElement) {
+            // 2. Aislamos el div contenedor exacto de la tarjeta (css-egoftb)
+            bloqueTurno = nodoAlerta.parentElement.parentElement;
+        }
+
+        // 3. Extraer el H1 de paciente SOLO dentro de esa tarjeta nueva
+        let nodoPaciente = bloqueTurno.querySelector('h1');
+
+        if (nodoPaciente) {
+            let paciente = nodoPaciente.innerText.trim();
+
+            // 4. Buscar el destino en la misma tarjeta
+            let parrafosBloque = Array.from(bloqueTurno.querySelectorAll('p'));
+            let nodoDestino = parrafosBloque.find(p => 
+                p.innerText.toLowerCase().includes('consultorio') || 
+                p.innerText.toLowerCase().includes('triage') || 
+                p.innerText.toLowerCase().includes('box')
+            );
             
-        sh_path = os.path.join(home, "iniciar_kiosko.sh")
-        if os.path.exists(sh_path):
-            with open(sh_path, "r") as f: content = f.read()
-            if "--load-extension" not in content:
-                content = content.replace("--kiosk", f"--kiosk --load-extension={tts_dir}")
-                with open(sh_path, "w") as f: f.write(content)
-                # Forzamos recarga de Chromium por las dudas de que haya arrancado antes que el agente
-                subprocess.Popen("export DISPLAY=:0 && pkill chromium && sleep 2 && nohup bash " + sh_path + " > /dev/null 2>&1 &", shell=True)
+            let destino = nodoDestino ? nodoDestino.innerText.trim() : "su lugar asignado";
+            let idLlamado = paciente + destino;
+            
+            // 5. Filtrar marcadores temporales o duplicados
+            if (paciente !== "" && paciente !== "PACIENTE TEMPORAL" && idLlamado !== ultimoLlamado) {
+                ultimoLlamado = idLlamado;
+                // Reemplazamos guiones por espacios para que la voz fluya mejor
+                let destinoHablado = destino.replace('-', ' ');
+                
+                setTimeout(() => hablar(`Atención. Paciente ${paciente}, por favor dirigirse a ${destinoHablado}`), 1500);
+            }
+        }
+    });
+
+    observar.observe(document.body, { childList: true, subtree: true });"""
+    
+    with open(os.path.join(tts_dir, "manifest.json"), "w") as f: f.write(manifest)
+    with open(os.path.join(tts_dir, "content.js"), "w") as f: f.write(content_js)
+        
+    sh_path = os.path.join(home, "iniciar_kiosko.sh")
+    if os.path.exists(sh_path):
+        with open(sh_path, "r") as f: content = f.read()
+        if "--load-extension" not in content:
+            content = content.replace("--kiosk", f"--kiosk --load-extension={tts_dir}")
+            with open(sh_path, "w") as f: f.write(content)
+            # Fuerza el reinicio de Chromium solo si la extensión no estaba configurada antes
+            subprocess.Popen("export DISPLAY=:0 && pkill chromium && sleep 2 && nohup bash " + sh_path + " > /dev/null 2>&1 &", shell=True)
 
 try:
     setup_tts_extension()
