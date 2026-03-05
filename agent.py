@@ -86,9 +86,10 @@ def control():
         repo_url = request.json.get('url')
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
-            cmd = f"sleep 2 && wget -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && sudo systemctl restart miki_agent.service"
+            # Descarga el archivo, lo reemplaza y fuerza el reinicio total del hardware
+            cmd = f"sleep 2 && wget -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && sudo reboot"
             subprocess.Popen(cmd, shell=True)
-            return jsonify({"status": "ok", "msg": "OTA iniciada"})
+            return jsonify({"status": "ok", "msg": "OTA iniciada. Reiniciando hardware..."})
         return jsonify({"error": "Falta URL"}), 400
     elif acc == 'wol':
         target_mac = request.json.get('mac')
