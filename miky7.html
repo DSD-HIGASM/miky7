@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MIKI 7 - Control Display Center</title>
+    <title>MIKI 8 - Mesh Command Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -45,9 +45,9 @@
         <div class="p-5 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-start">
             <div>
                 <h1 class="font-extrabold text-xl tracking-tighter text-brand-600 dark:text-brand-500 flex items-center gap-2">
-                    <i class="ph-fill ph-target text-2xl"></i> MIKY 7
+                    <i class="ph-fill ph-target text-2xl"></i> MIKY 8
                 </h1>
-                <p class="text-[9px] text-slate-500 dark:text-zinc-500 font-mono uppercase tracking-[0.2em] mt-1">NOC V13.2</p>
+                <p class="text-[9px] text-slate-500 dark:text-zinc-500 font-mono uppercase tracking-[0.2em] mt-1">Mesh Client V14</p>
             </div>
             <button onclick="toggleTheme()" class="p-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:scale-110 transition-transform">
                 <i id="theme-icon" class="ph-bold ph-moon-stars text-lg text-brand-600"></i>
@@ -83,16 +83,22 @@
                 </div>
             </div>
             <div class="flex items-center gap-3">
+                
+                <div class="hidden lg:flex items-center bg-slate-100 dark:bg-zinc-900 rounded-lg py-1 px-3 border border-slate-200 dark:border-zinc-800 shadow-sm mr-2 gap-2" title="Nodo que proveyó la base de datos">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 online-pulse"></div>
+                    <span class="text-[10px] font-bold text-slate-500 uppercase">Enlace: <span id="lbl-active-node" class="text-slate-800 dark:text-zinc-300 font-mono">--</span></span>
+                </div>
+
                 <div class="flex items-center bg-slate-100 dark:bg-zinc-900 rounded-lg p-1 border border-slate-200 dark:border-zinc-800 shadow-sm mr-2">
                     <span class="text-[9px] font-bold text-slate-400 uppercase px-2 mr-1">Masivo:</span>
-                    <button onclick="askGlobalUrl()" class="p-1.5 rounded-md hover:bg-white dark:hover:bg-zinc-700 text-brand-600 dark:text-brand-400 transition-colors" title="Cambiar URL a Todos"><i class="ph-bold ph-globe text-base"></i></button>
+                    <button onclick="globalAction('global_url')" class="p-1.5 rounded-md hover:bg-white dark:hover:bg-zinc-700 text-brand-600 dark:text-brand-400 transition-colors" title="Lanzar URL Global a Todos"><i class="ph-bold ph-globe text-base"></i></button>
                     <button onclick="globalAction('refresh')" class="p-1.5 rounded-md hover:bg-white dark:hover:bg-zinc-700 text-slate-600 dark:text-slate-300 transition-colors" title="F5 a Todos"><i class="ph-bold ph-arrows-clockwise text-base"></i></button>
                     <button onclick="globalAction('clear_cache')" class="p-1.5 rounded-md hover:bg-white dark:hover:bg-zinc-700 text-slate-600 dark:text-slate-300 transition-colors" title="Limpiar Caché a Todos"><i class="ph-bold ph-trash text-base"></i></button>
                     <button onclick="globalAction('reboot')" class="p-1.5 rounded-md hover:bg-red-500 hover:text-white text-red-500 transition-colors" title="Reiniciar Todos"><i class="ph-bold ph-power text-base"></i></button>
                 </div>
 
-                <div id="sync-status" class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full text-[10px] font-bold border border-emerald-500/20">
-                    <i class="ph-bold ph-radio-button online-pulse"></i> SYNC
+                <div id="sync-status" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-zinc-800 text-slate-500 rounded-full text-[10px] font-bold border border-slate-200 dark:border-zinc-700">
+                    <i class="ph-bold ph-spinner-gap spinner"></i> INICIANDO
                 </div>
                 
                 <div class="flex bg-slate-100 dark:bg-zinc-900 p-1 rounded-lg border border-slate-200 dark:border-zinc-800 shadow-inner">
@@ -110,7 +116,7 @@
                             <th class="px-4 py-3">Est</th>
                             <th class="px-4 py-3">Terminal</th>
                             <th class="px-4 py-3">IP / MAC</th>
-                            <th class="px-4 py-3">Acciones Rápidas</th>
+                            <th class="px-4 py-3 text-right">Acciones Rápidas</th>
                         </tr>
                     </thead>
                     <tbody id="pc-list-body" class="divide-y divide-slate-100 dark:divide-zinc-800"></tbody>
@@ -125,6 +131,83 @@
     </main>
 
     <div id="toast-container" class="fixed bottom-6 right-6 z-[100] w-80 pointer-events-none"></div>
+
+    <div id="connectModal" class="fixed inset-0 z-[120] hidden flex items-center justify-center p-4">
+        <div id="connectBackdrop" class="fixed inset-0 bg-slate-900/90 dark:bg-black/90 backdrop-blur-md opacity-0 transition-opacity"></div>
+        <div id="connectPanel" class="relative w-full max-w-sm bg-white dark:bg-surface-accent rounded-2xl shadow-2xl transform scale-95 opacity-0 transition-all border border-slate-200 dark:border-zinc-800 overflow-hidden">
+            <div class="p-6 bg-brand-600 flex flex-col items-center justify-center text-white relative overflow-hidden">
+                <div class="absolute -right-10 -top-10 w-32 h-32 bg-brand-500 rounded-full blur-2xl opacity-50"></div>
+                <i class="ph-fill ph-plugs-connected text-5xl mb-2 relative z-10"></i>
+                <h2 class="text-xl font-black relative z-10">Clúster MIKI HSI</h2>
+                <p class="text-xs text-brand-100 font-medium text-center mt-1 relative z-10">Ingresa a la red mesh proporcionando la IP de cualquier nodo encendido y la clave maestra.</p>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase block mb-1">IP de un Nodo Local</label>
+                    <input type="text" id="mesh-ip" placeholder="Ej: 192.168.1.10" class="w-full bg-slate-100 dark:bg-black border border-slate-200 dark:border-zinc-700 focus:border-brand-500 rounded-lg p-2.5 text-xs outline-none font-mono" />
+                </div>
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase block mb-1">Contraseña Maestra (Auth)</label>
+                    <input type="password" id="mesh-pass" placeholder="••••••••" class="w-full bg-slate-100 dark:bg-black border border-slate-200 dark:border-zinc-700 focus:border-brand-500 rounded-lg p-2.5 text-xs outline-none font-mono" onkeypress="if(event.key==='Enter') triggerConnection()" />
+                </div>
+                <button onclick="triggerConnection()" id="btn-mesh-connect" class="w-full bg-slate-800 dark:bg-white text-white dark:text-slate-900 py-3 rounded-lg text-xs font-bold shadow-md hover:bg-slate-700 dark:hover:bg-slate-200 transition-colors flex justify-center items-center gap-2 mt-2">
+                    <i class="ph-bold ph-link text-base"></i> CONECTAR AL CLÚSTER
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sysPrompt" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4">
+        <div id="promptBackdrop" class="fixed inset-0 bg-slate-900/80 dark:bg-black/80 backdrop-blur-sm opacity-0 transition-opacity"></div>
+        <div id="promptPanel" class="relative w-full max-w-sm bg-white dark:bg-surface-accent rounded-xl shadow-2xl transform scale-95 opacity-0 transition-all border border-slate-200 dark:border-zinc-800 p-5">
+            <h3 id="promptTitle" class="text-base font-bold text-slate-800 dark:text-white mb-2"></h3>
+            <p id="promptMsg" class="text-xs text-slate-500 dark:text-zinc-400 mb-4 whitespace-pre-line"></p>
+            <input type="text" id="promptInput" class="w-full bg-slate-100 dark:bg-black border border-slate-200 dark:border-zinc-700 focus:border-brand-500 rounded-lg p-2.5 text-xs outline-none font-mono mb-4" onkeypress="if(event.key==='Enter') submitPrompt(true)" />
+            <div class="flex justify-end gap-2">
+                <button onclick="submitPrompt(false)" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">Cancelar</button>
+                <button onclick="submitPrompt(true)" class="px-4 py-2 rounded-lg text-xs font-bold bg-brand-600 hover:bg-brand-700 text-white shadow-sm transition-colors">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sysConfirm" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4">
+        <div id="confirmBackdrop" class="fixed inset-0 bg-slate-900/80 dark:bg-black/80 backdrop-blur-sm opacity-0 transition-opacity"></div>
+        <div id="confirmPanel" class="relative w-full max-w-sm bg-white dark:bg-surface-accent rounded-xl shadow-2xl transform scale-95 opacity-0 transition-all border border-slate-200 dark:border-zinc-800 p-5">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center text-red-600"><i class="ph-bold ph-warning text-xl"></i></div>
+                <h3 id="confirmTitle" class="text-base font-bold text-slate-800 dark:text-white"></h3>
+            </div>
+            <p id="confirmMsg" class="text-xs text-slate-500 dark:text-zinc-400 mb-5 whitespace-pre-line ml-13"></p>
+            <div class="flex justify-end gap-2">
+                <button onclick="submitConfirm(false)" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">Cancelar</button>
+                <button onclick="submitConfirm(true)" class="px-4 py-2 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors">Sí, Ejecutar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cronModal" class="fixed inset-0 z-[80] hidden flex items-center justify-center p-4">
+        <div id="cronBackdrop" class="fixed inset-0 bg-slate-900/80 dark:bg-black/80 backdrop-blur-sm opacity-0 transition-opacity"></div>
+        <div id="cronPanel" class="relative w-full max-w-sm bg-white dark:bg-surface-accent rounded-xl shadow-2xl transform scale-95 opacity-0 transition-all border border-slate-200 dark:border-zinc-800 overflow-hidden">
+            <div class="p-4 border-b border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/30 flex justify-between items-center">
+                <h3 class="font-bold flex items-center gap-2"><i class="ph-bold ph-clock text-purple-500"></i> Gestor de Energía (CRON)</h3>
+                <button onclick="closeSysModal('cronModal','cronPanel','cronBackdrop')" class="text-slate-400 hover:text-white"><i class="ph-bold ph-x"></i></button>
+            </div>
+            <div class="p-5 space-y-4">
+                <p class="text-xs text-slate-500 dark:text-zinc-400">Configura a qué hora debe encenderse y apagarse automáticamente la pantalla de <strong id="cron-pc-name" class="text-slate-800 dark:text-white"></strong>.</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-[10px] font-black text-slate-400 uppercase block mb-1">Hora Encendido</label><input type="time" id="cron-on" class="w-full bg-slate-100 dark:bg-black border border-slate-200 dark:border-zinc-700 focus:border-brand-500 rounded-lg p-2 text-sm outline-none" value="06:00" /></div>
+                    <div><label class="text-[10px] font-black text-slate-400 uppercase block mb-1">Hora Apagado</label><input type="time" id="cron-off" class="w-full bg-slate-100 dark:bg-black border border-slate-200 dark:border-zinc-700 focus:border-brand-500 rounded-lg p-2 text-sm outline-none" value="20:00" /></div>
+                </div>
+            </div>
+            <div class="p-4 bg-slate-50 dark:bg-zinc-900/50 border-t border-slate-200 dark:border-zinc-800 flex justify-between">
+                <button onclick="deleteCron()" id="btn-del-cron" class="px-4 py-2 rounded-lg text-xs font-bold text-red-500 hover:bg-red-500/10 transition-colors hidden"><i class="ph-bold ph-trash mr-1"></i> Eliminar Rutina</button>
+                <div class="flex gap-2 ml-auto">
+                    <button onclick="closeSysModal('cronModal','cronPanel','cronBackdrop')" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-500 hover:text-white transition-colors">Cancelar</button>
+                    <button onclick="saveCron()" class="px-4 py-2 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-colors">Guardar Rutina</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div id="terminalModal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4">
         <div id="terminalBackdrop" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm opacity-0 transition-opacity"></div>
@@ -159,7 +242,7 @@
 
     <div id="configModal" class="fixed inset-0 z-[50] hidden flex items-center justify-center p-4">
         <div id="configBackdrop" class="fixed inset-0 bg-slate-900/80 dark:bg-black/90 backdrop-blur-sm opacity-0 transition-opacity"></div>
-        <div id="configPanel" class="relative w-full max-w-4xl bg-white dark:bg-surface-accent rounded-2xl shadow-2xl transform scale-95 opacity-0 transition-all flex flex-col max-h-[85vh] border border-slate-200 dark:border-zinc-800 overflow-hidden">
+        <div id="configPanel" class="relative w-full max-w-5xl bg-white dark:bg-surface-accent rounded-2xl shadow-2xl transform scale-95 opacity-0 transition-all flex flex-col max-h-[85vh] border border-slate-200 dark:border-zinc-800 overflow-hidden">
             <div class="p-5 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-center bg-slate-50/50 dark:bg-zinc-900/30">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 bg-brand-500 rounded-xl flex items-center justify-center text-white"><i class="ph-bold ph-wrench text-xl"></i></div>
@@ -170,7 +253,7 @@
             <div class="flex border-b border-slate-200 dark:border-zinc-800 px-6 gap-6 overflow-x-auto hide-scrollbar text-xs">
                 <button onclick="switchTab('tab-net')" id="btn-tab-net" class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Red & Seguridad</button>
                 <button onclick="switchTab('tab-tax')" id="btn-tab-tax" class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Sectores</button>
-                <button onclick="switchTab('tab-hw')"  id="btn-tab-hw"  class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Inventario & Discovery</button>
+                <button onclick="switchTab('tab-hw')"  id="btn-tab-hw"  class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Inventario & Agendas</button>
                 <button onclick="switchTab('tab-ota')" id="btn-tab-ota" class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Despliegue OTA</button>
                 <button onclick="switchTab('tab-tg')"  id="btn-tab-tg"  class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Alertas Telegram</button>
             </div>
@@ -178,16 +261,26 @@
                 <div id="tab-net" class="tab-content space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
-                            <label class="text-[10px] font-black text-slate-400 uppercase block mb-1">Bearer Token (Auth)</label>
+                            <label class="text-[10px] font-black text-slate-400 uppercase block mb-1">Bearer Token (Auth Local)</label>
                             <input type="password" id="cfg-token" class="w-full bg-slate-100 dark:bg-black border border-transparent focus:border-brand-500 rounded-lg p-2 font-mono text-xs outline-none" />
                         </div>
-                        <div class="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-slate-200 dark:border-zinc-800">
-                            <label class="text-[10px] font-black text-slate-400 uppercase block mb-1">URL Base Hospital (Global)</label>
-                            <input type="text" id="cfg-base" class="w-full bg-slate-100 dark:bg-black border border-transparent focus:border-brand-500 rounded-lg p-2 font-mono text-xs outline-none" />
-                        </div>
-                        <div class="bg-orange-500/5 p-4 rounded-xl border border-orange-500/20 md:col-span-2">
+                        <div class="bg-orange-500/5 p-4 rounded-xl border border-orange-500/20">
                             <label class="text-[10px] font-black text-orange-500 uppercase block mb-1">URL Mantenimiento Local (Offline)</label>
                             <input type="text" id="cfg-panic" class="w-full bg-white dark:bg-black border border-orange-500/20 focus:border-orange-500 rounded-lg p-2 font-mono text-xs outline-none text-orange-600" />
+                        </div>
+                        
+                        <div class="bg-brand-50 dark:bg-brand-900/10 p-4 rounded-xl border border-brand-200 dark:border-brand-800 md:col-span-2">
+                            <label class="text-[10px] font-black text-brand-600 dark:text-brand-400 uppercase block mb-1">URL Base Hospital (Global)</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="cfg-base" class="flex-1 bg-white dark:bg-black border border-transparent focus:border-brand-500 rounded-lg p-2.5 font-mono text-xs outline-none shadow-sm" />
+                                <button onclick="saveGlobalUrl()" class="bg-slate-200 hover:bg-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 px-4 py-2 rounded-lg text-xs font-bold shadow-sm flex items-center gap-2 transition-colors">
+                                    <i class="ph-bold ph-floppy-disk text-base"></i> GUARDAR
+                                </button>
+                                <button onclick="pushGlobalUrl()" class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold shadow-md flex items-center gap-2 transition-colors">
+                                    <i class="ph-bold ph-paper-plane-right text-base"></i> EJECUTAR EN TODOS
+                                </button>
+                            </div>
+                            <p class="text-[10px] text-brand-600/70 dark:text-brand-400/70 mt-2 font-medium">Puedes solo Guardar la URL, o Ejecutarla al instante para cambiar masivamente las pantallas encendidas.</p>
                         </div>
                     </div>
                 </div>
@@ -202,7 +295,7 @@
 
                 <div id="tab-hw" class="tab-content hidden space-y-4">
                     <div class="flex justify-between items-center">
-                        <h4 class="text-xs font-black text-slate-400 uppercase">Terminales Físicas</h4>
+                        <h4 class="text-xs font-black text-slate-400 uppercase">Terminales y Botones de Agenda</h4>
                         <div class="flex gap-2">
                             <button onclick="startAutoDiscovery()" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5" id="btn-discover"><i class="ph-bold ph-radar"></i> AUTO-DESCUBRIR RED</button>
                             <button onclick="addPC()" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5"><i class="ph-bold ph-plus"></i> NUEVO EQUIPO</button>
@@ -225,7 +318,7 @@
                 <div id="tab-tg" class="tab-content hidden space-y-4">
                     <div class="bg-blue-500/10 border border-blue-500/30 p-5 rounded-xl">
                         <h4 class="text-sm font-black text-blue-600 dark:text-blue-400 flex items-center gap-2 mb-1"><i class="ph-fill ph-telegram-logo"></i> Notificaciones de Caída</h4>
-                        <p class="text-xs text-slate-600 dark:text-zinc-400 mb-4 font-medium">Si el panel detecta que un equipo pierde red, enviará un aviso al Bot de Telegram.</p>
+                        <p class="text-xs text-slate-600 dark:text-zinc-400 mb-4 font-medium">Los nodos elegirán a un Capitán automáticamente para enviar avisos si hay caídas en la red.</p>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div><label class="text-[10px] font-black text-blue-500 uppercase block mb-1">Bot Token</label><input type="password" id="cfg-tg-token" class="w-full bg-white dark:bg-black border border-blue-500/20 focus:border-blue-500 rounded-lg p-2 font-mono text-xs outline-none text-blue-600" /></div>
                             <div><label class="text-[10px] font-black text-blue-500 uppercase block mb-1">Chat ID</label><input type="text" id="cfg-tg-chat" class="w-full bg-white dark:bg-black border border-blue-500/20 focus:border-blue-500 rounded-lg p-2 font-mono text-xs outline-none text-blue-600" /></div>
@@ -234,47 +327,154 @@
                 </div>
             </div>
             <div class="p-4 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/50 flex justify-end gap-3">
-                <button onclick="closeModals()" class="px-5 py-2 text-xs font-bold text-slate-500 hover:text-white">DESCARTAR</button>
-                <button onclick="saveAll()" class="px-6 py-2 bg-brand-600 text-white rounded-lg text-xs font-bold shadow-md">APLICAR CAMBIOS</button>
+                <button onclick="closeModals()" class="px-5 py-2 text-xs font-bold text-slate-500 hover:text-white">CERRAR</button>
+                <button onclick="saveAllAndSync()" class="px-6 py-2 bg-brand-600 text-white rounded-lg text-xs font-bold shadow-md">APLICAR Y SINCRONIZAR CLÚSTER</button>
             </div>
         </div>
     </div>
 
     <script>
-        let db = { masterPass: "", globalDefault: "https://llamador-shc.ms.gba.gov.ar", maintUrl: "file:///home/higa/control_remoto/mantenimiento.html", sectors: ["General"], pcs: [], tgToken: "", tgChat: "", otaUrl: "" };
-        let ui = { view: "grid", tab: "Todos", query: "", theme: "dark", isSyncing: false, activeTermPc: null };
+        // CONFIGURACIÓN DEL CLIENTE (LocalStorage)
+        let clientConfig = { knownIps: [], masterPass: "" };
+        // BASE DE DATOS DEL CLUSTER (Viene del Nodo)
+        let db = { globalDefault: "https://llamador-shc.ms.gba.gov.ar", maintUrl: "file:///home/higa/control_remoto/mantenimiento.html", sectors: ["General"], pcs: [], tgToken: "", tgChat: "", otaUrl: "" };
+        let ui = { view: "grid", tab: "Todos", query: "", theme: "dark", isSyncing: false, activeNode: null };
+        let clusterLeader = null;
         let offlineCounters = {};
 
+        // SISTEMA DE MODALES ASÍNCRONOS
+        let promptResolver = null;
+        let confirmResolver = null;
+
+        function showPrompt(title, msg, defaultVal = "") {
+            return new Promise(resolve => {
+                promptResolver = resolve;
+                document.getElementById('promptTitle').innerText = title;
+                document.getElementById('promptMsg').innerText = msg;
+                document.getElementById('promptInput').value = defaultVal;
+                openSysModal('sysPrompt', 'promptPanel', 'promptBackdrop');
+                setTimeout(() => document.getElementById('promptInput').focus(), 100);
+            });
+        }
+        function submitPrompt(isOk) {
+            const val = document.getElementById('promptInput').value.trim();
+            closeSysModal('sysPrompt', 'promptPanel', 'promptBackdrop');
+            if(promptResolver) promptResolver(isOk ? val : null);
+            promptResolver = null;
+        }
+
+        function showConfirm(title, msg) {
+            return new Promise(resolve => {
+                confirmResolver = resolve;
+                document.getElementById('confirmTitle').innerText = title;
+                document.getElementById('confirmMsg').innerText = msg;
+                openSysModal('sysConfirm', 'confirmPanel', 'confirmBackdrop');
+            });
+        }
+        function submitConfirm(isOk) {
+            closeSysModal('sysConfirm', 'confirmPanel', 'confirmBackdrop');
+            if(confirmResolver) confirmResolver(isOk);
+            confirmResolver = null;
+        }
+
+        function openSysModal(wrap, panel, back) {
+            const w = document.getElementById(wrap), p = document.getElementById(panel), b = document.getElementById(back);
+            w.classList.remove("hidden");
+            setTimeout(() => { b.classList.replace("opacity-0", "opacity-100"); p.classList.replace("scale-95", "scale-100"); p.classList.replace("opacity-0", "opacity-100"); }, 10);
+        }
+        function closeSysModal(wrap, panel, back) {
+            const w = document.getElementById(wrap), p = document.getElementById(panel), b = document.getElementById(back);
+            b.classList.replace("opacity-100", "opacity-0"); p.classList.replace("scale-100", "scale-95"); p.classList.replace("opacity-100", "opacity-0");
+            setTimeout(() => w.classList.add("hidden"), 200);
+        }
+
+        // MOTOR DE INICIO Y RED MESH
         function init() {
             ui.theme = localStorage.getItem("miki_theme") || "dark";
             ui.view = localStorage.getItem("miki_view") || "grid";
             document.documentElement.className = ui.theme;
-            const saved = localStorage.getItem("miki_v13_db") || localStorage.getItem("miki_v12_db");
-            if (saved) { try { db = { ...db, ...JSON.parse(saved) }; } catch (e) { } }
-            renderSectorsNav();
-            updateViewModeUI();
-            updateUIGrid();
-            startNetworkEngine();
+            
+            const savedConf = localStorage.getItem("miki_client_conf");
+            if(savedConf) { try { clientConfig = {...clientConfig, ...JSON.parse(savedConf)}; } catch(e){} }
+            
+            // Rescatar pass vieja si existe
+            const oldDb = localStorage.getItem("miki_v13_db");
+            if(oldDb && !clientConfig.masterPass) { try { clientConfig.masterPass = JSON.parse(oldDb).masterPass; } catch(e){} }
+
             updateThemeIcon();
-            switchTab('tab-net'); // Activa primera pestaña por defecto
+            updateViewModeUI();
+            
+            if(clientConfig.knownIps.length > 0) {
+                attemptConnection(clientConfig.knownIps);
+            } else {
+                openSysModal('connectModal', 'connectPanel', 'connectBackdrop');
+            }
         }
 
-        const getTgTimestamp = () => new Date().toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'medium' });
-
-        function sendTelegramAlert(pcName, ip, pcSector) {
-            if (!db.tgToken || !db.tgChat) return;
-            const msg = `🚨 <b>ALERTA CRÍTICA: LLAMADOR OFFLINE</b> 🚨\n\n⚠️ <i>Se ha perdido la conexión de red.</i>\n\n📍 <b>Sector:</b> ${pcSector}\n🖥️ <b>Equipo:</b> ${pcName}\n🌐 <b>IP LAN:</b> <code>${ip}</code>\n🕒 <b>Hora:</b> ${getTgTimestamp()}`;
-            fetch(`https://api.telegram.org/bot${db.tgToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: db.tgChat, text: msg, parse_mode: 'HTML' }) }).catch(() => { });
+        async function attemptConnection(ipsArray) {
+            document.getElementById("sync-status").innerHTML = '<i class="ph-bold ph-spinner-gap spinner"></i> CONECTANDO';
+            for(let ip of ipsArray) {
+                if(!ip) continue;
+                try {
+                    const ctrl = new AbortController();
+                    const tid = setTimeout(() => ctrl.abort(), 2000);
+                    const res = await fetch(`http://${ip}:5000/sync`, { headers: headers(), signal: ctrl.signal });
+                    clearTimeout(tid);
+                    if(res.ok) {
+                        const data = await res.json();
+                        if(data.db && data.db.pcs) db = { ...db, ...data.db };
+                        
+                        clusterLeader = data.current_leader;
+                        ui.activeNode = ip;
+                        
+                        clientConfig.knownIps = [ip, ...clientConfig.knownIps.filter(x => x !== ip)].slice(0, 5);
+                        localStorage.setItem("miki_client_conf", JSON.stringify(clientConfig));
+                        
+                        closeSysModal('connectModal', 'connectPanel', 'connectBackdrop');
+                        showToast(`Conectado al clúster vía ${ip}`, "success");
+                        document.getElementById('lbl-active-node').innerText = ip;
+                        
+                        renderSectorsNav();
+                        updateUIGrid();
+                        if(!ui.isSyncing) startNetworkEngine();
+                        return;
+                    } else if(res.status === 401) {
+                        showToast("Contraseña Auth incorrecta", "error");
+                        openSysModal('connectModal', 'connectPanel', 'connectBackdrop');
+                        return;
+                    }
+                } catch(e) { console.log("Fallo conectando a", ip); }
+            }
+            openSysModal('connectModal', 'connectPanel', 'connectBackdrop');
+            showToast("No se pudo contactar al clúster.", "warning");
         }
 
-        function sendTelegramRecoveryAlert(pcName, ip, pcSector) {
-            if (!db.tgToken || !db.tgChat) return;
-            const msg = `✅ <b>SISTEMA RESTAURADO: ONLINE</b> ✅\n\n🔄 <i>La terminal recuperó la conexión.</i>\n\n📍 <b>Sector:</b> ${pcSector}\n🖥️ <b>Equipo:</b> ${pcName}\n🌐 <b>IP LAN:</b> <code>${ip}</code>\n🕒 <b>Hora:</b> ${getTgTimestamp()}`;
-            fetch(`https://api.telegram.org/bot${db.tgToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: db.tgChat, text: msg, parse_mode: 'HTML' }) }).catch(() => { });
+        function triggerConnection() {
+            const ip = document.getElementById('mesh-ip').value.trim();
+            const pw = document.getElementById('mesh-pass').value.trim();
+            if(!ip || !pw) return;
+            clientConfig.masterPass = pw;
+            attemptConnection([ip]);
+        }
+
+        async function pushDbToCluster() {
+            if(!clientConfig.masterPass) return;
+            let targetIps = new Set(db.pcs.map(p => p.ip).filter(ip => ip));
+            if(ui.activeNode) targetIps.add(ui.activeNode);
+            
+            const promises = Array.from(targetIps).map(ip => {
+                return fetch(`http://${ip}:5000/sync`, {
+                    method: 'POST',
+                    headers: headers(),
+                    body: JSON.stringify(db)
+                }).catch(()=>null);
+            });
+            await Promise.all(promises);
+            showToast("Base de datos replicada en el clúster", "success");
         }
 
         async function startAutoDiscovery() {
-            const baseIp = prompt("Ingresa los 3 primeros octetos de tu red LAN (Ejemplo: 192.168.1):", "192.168.1");
+            const baseIp = await showPrompt("Auto-Descubrir Equipos", "Ingresa los 3 primeros octetos de tu red LAN\n(Ejemplo: 192.168.1):", "192.168.1");
             if (!baseIp) return;
             document.getElementById("btn-discover").innerHTML = '<i class="ph-bold ph-spinner-gap spinner"></i> ESCANEANDO...';
             let foundCount = 0;
@@ -290,7 +490,7 @@
                         clearTimeout(tid);
                         if (r.ok) {
                             const data = await r.json();
-                            db.pcs.push({ id: Date.now() + i, name: `Terminal EXO Detectada`, ip: ip, mac: data.mac || "", sector: db.sectors[0] });
+                            db.pcs.push({ id: Date.now() + i, name: `Terminal Detectada`, ip: ip, mac: data.mac || "", sector: db.sectors[0], customButtons: [], cron: null });
                             foundCount++;
                         }
                     }).catch(() => { }),
@@ -308,6 +508,7 @@
             let online = 0;
             const syncIcon = document.querySelector("#sync-status i");
             if (syncIcon) syncIcon.className = "ph-bold ph-arrows-clockwise spinner text-brand-500";
+            
             for (let pc of db.pcs) {
                 if (!pc.ip) continue;
                 try {
@@ -319,25 +520,19 @@
                         online++;
                         const data = await res.json();
                         pc.mac = data.mac;
+                        if(data.leader) clusterLeader = data.leader;
                         updatePCStatus(pc.id, true, data);
-                        if (offlineCounters[pc.id] >= 6) {
-                            sendTelegramRecoveryAlert(pc.name, pc.ip, pc.sector);
-                            showToast(`Recuperado: ${pc.name}.`, "success");
-                        }
-                        offlineCounters[pc.id] = 0;
                     } else throw Error();
                 } catch (e) {
                     updatePCStatus(pc.id, false);
-                    offlineCounters[pc.id] = (offlineCounters[pc.id] || 0) + 1;
-                    if (offlineCounters[pc.id] === 6) {
-                        sendTelegramAlert(pc.name, pc.ip, pc.sector);
-                        showToast(`Caída: ${pc.name}.`, "warning");
-                    }
                 }
             }
             document.getElementById("kpi-total").innerText = db.pcs.length;
             document.getElementById("kpi-online").innerText = online;
-            if (syncIcon) syncIcon.className = "ph-bold ph-check-circle text-emerald-500";
+            if (syncIcon) {
+                syncIcon.className = "ph-bold ph-check-circle text-emerald-500";
+                document.getElementById("sync-status").innerHTML = `<i class="${syncIcon.className}"></i> ONLINE`;
+            }
             setTimeout(syncLoop, 5000);
         }
 
@@ -354,7 +549,7 @@
             }
         }
 
-        const headers = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${db.masterPass}` });
+        const headers = () => ({ "Content-Type": "application/json", "Authorization": `Bearer ${clientConfig.masterPass}` });
 
         async function sendCommand(pcId, action, params = {}, silent = false) {
             const pc = db.pcs.find((p) => p.id == pcId);
@@ -376,45 +571,89 @@
             }
         }
 
-        // ACCIONES GLOBALES MASIVAS
-        function globalAction(action) {
-            let names = { 'refresh': 'Recargar Pantallas', 'clear_cache': 'Limpiar Caché', 'reboot': 'Reiniciar Hardware' };
-            if(!confirm(`⚠️ ATENCIÓN ⚠️\n¿Ejecutar '${names[action]}' en TODOS los equipos del hospital?`)) return;
-            db.pcs.forEach(pc => sendCommand(pc.id, action, {}, true));
-            showToast(`Comando masivo disparado a la red.`, "info");
+        function saveGlobalUrl() {
+            db.globalDefault = document.getElementById("cfg-base").value.trim();
+            showToast("URL global guardada. Aplica para sincronizar.", "info");
         }
 
-        function askGlobalUrl() {
-            const url = prompt("CAMBIO MASIVO DE URL\nIngrese la URL que se aplicará a todas las terminales encendidas:", db.globalDefault);
-            if(url && confirm("¿Está seguro de enviar esta página a TODOS los equipos ahora?")) {
-                db.globalDefault = url;
-                localStorage.setItem("miki_v13_db", JSON.stringify(db));
+        async function pushGlobalUrl() {
+            const url = document.getElementById("cfg-base").value.trim();
+            if (!url) { showToast("La URL no puede estar vacía", "error"); return; }
+            db.globalDefault = url;
+            const ok = await showConfirm("Cambio Masivo de URL", `¿Enviar la URL Global a TODOS los ${db.pcs.length} equipos encendidos ahora mismo?`);
+            if (ok) {
                 db.pcs.forEach(pc => sendCommand(pc.id, "startup", {url: url}, true));
                 showToast("URL global enviada a la red.", "success");
             }
         }
 
-        function askIndividualUrl(pcId) {
-            const pc = db.pcs.find(p => p.id == pcId);
-            const url = prompt(`Cambiar URL en ${pc.name}:\n(Puede ser una agenda específica)`, "");
-            if(url) {
-                sendCommand(pcId, 'startup', {url: url}, false);
+        // ACCIONES GLOBALES MASIVAS
+        async function globalAction(action) {
+            if(action === 'global_url') {
+                if(await showConfirm("Lanzar URL Global", `¿Enviar la URL Global (${db.globalDefault}) a TODOS los equipos?`)) {
+                    db.pcs.forEach(pc => sendCommand(pc.id, "startup", {url: db.globalDefault}, true));
+                    showToast("URL Global disparada a la red.", "info");
+                }
+                return;
             }
+            let names = { 'refresh': 'Recargar Pantallas', 'clear_cache': 'Limpiar Caché', 'reboot': 'Reiniciar Hardware' };
+            if(await showConfirm("Acción Masiva", `¿Ejecutar '${names[action]}' en TODOS los equipos del hospital?`)) {
+                db.pcs.forEach(pc => sendCommand(pc.id, action, {}, true));
+                showToast(`Comando masivo disparado a la red.`, "info");
+            }
+        }
+
+        async function askIndividualUrl(pcId) {
+            const pc = db.pcs.find(p => p.id == pcId);
+            const url = await showPrompt("URL Manual de Emergencia", `Ingresa una URL temporal para forzar en ${pc.name}:\n(Esta URL NO se guardará en inventario)`, "");
+            if(url) { sendCommand(pcId, 'startup', {url: url}, false); }
+        }
+
+        // GESTOR DE CRON
+        let activeCronPcId = null;
+        function openCronModal(pcId) {
+            activeCronPcId = pcId;
+            const pc = db.pcs.find(p => p.id == pcId);
+            document.getElementById('cron-pc-name').innerText = pc.name;
+            if(pc.cron) {
+                document.getElementById('cron-on').value = pc.cron.on;
+                document.getElementById('cron-off').value = pc.cron.off;
+                document.getElementById('btn-del-cron').classList.remove('hidden');
+            } else {
+                document.getElementById('cron-on').value = "06:00";
+                document.getElementById('cron-off').value = "20:00";
+                document.getElementById('btn-del-cron').classList.add('hidden');
+            }
+            openSysModal('cronModal', 'cronPanel', 'cronBackdrop');
+        }
+
+        function saveCron() {
+            const on_t = document.getElementById('cron-on').value;
+            const off_t = document.getElementById('cron-off').value;
+            sendCommand(activeCronPcId, "schedule_power", { on_time: on_t, off_time: off_t });
+            const pc = db.pcs.find(p => p.id == activeCronPcId);
+            pc.cron = { on: on_t, off: off_t };
+            pushDbToCluster();
+            updateUIGrid();
+            closeSysModal('cronModal', 'cronPanel', 'cronBackdrop');
+        }
+
+        function deleteCron() {
+            sendCommand(activeCronPcId, "clear_cron");
+            const pc = db.pcs.find(p => p.id == activeCronPcId);
+            pc.cron = null;
+            pushDbToCluster();
+            updateUIGrid();
+            closeSysModal('cronModal', 'cronPanel', 'cronBackdrop');
         }
 
         async function triggerWakeOnLan(deadPcId) {
             const deadPc = db.pcs.find((p) => p.id == deadPcId);
             if (!deadPc.mac || deadPc.mac === "00:00:00:00:00:00") { showToast("MAC no registrada.", "error"); return; }
-            const alivePc = db.pcs.find((p) => p.id != deadPcId && offlineCounters[p.id] === 0);
+            const alivePc = db.pcs.find((p) => p.id != deadPcId && p.ip);
             if (!alivePc) { showToast("No hay equipos encendidos para usar de puente.", "error"); return; }
             showToast(`Puenteando a través de ${alivePc.name}...`, "info");
             sendCommand(alivePc.id, "wol", { mac: deadPc.mac }, true);
-        }
-
-        function askCronSchedule(pcId) {
-            const on_t = prompt("RUTINA CRON\nHora de ENCENDIDO (HH:MM):", "06:00"); if (!on_t) return;
-            const off_t = prompt("Hora de APAGADO (HH:MM):", "20:00"); if (!off_t) return;
-            sendCommand(pcId, "schedule_power", { on_time: on_t, off_time: off_t });
         }
 
         async function takeScreenshot(pcId) {
@@ -436,17 +675,18 @@
         async function fireOTA() {
             const url = document.getElementById("cfg-ota-url").value.trim();
             if (!url.includes("raw.githubusercontent")) { showToast("Debe ser URL Raw de GitHub", "error"); return; }
-            if (!confirm(`¿Desplegar nueva versión en ${db.pcs.length} equipos?`)) return;
-            db.otaUrl = url; localStorage.setItem("miki_v13_db", JSON.stringify(db));
-            showToast("Pipeline OTA Iniciado...", "info");
-            for (let pc of db.pcs) await sendCommand(pc.id, "update_agent", { url: url }, true);
-            showToast("OTA finalizado.", "success");
+            if (await showConfirm("Despliegue OTA", `¿Desplegar nueva versión del backend en los ${db.pcs.length} equipos?`)) {
+                db.otaUrl = url; pushDbToCluster();
+                showToast("Pipeline OTA Iniciado...", "info");
+                for (let pc of db.pcs) await sendCommand(pc.id, "update_agent", { url: url }, true);
+                showToast("OTA finalizado.", "success");
+            }
         }
 
         function openTerminal(pcId) {
             ui.activeTermPc = db.pcs.find((p) => p.id == pcId);
             document.getElementById("term-title").innerText = `root@${ui.activeTermPc.ip}`;
-            document.getElementById("term-output").innerHTML = `<p class="sys">Miki SSH v13.2</p><p class="sys">cmd: refresh, clear_cache, reboot, vol_up, vol_down, sleep_screen, wake_screen</p>`;
+            document.getElementById("term-output").innerHTML = `<p class="sys">Miki SSH v14.0</p><p class="sys">cmd: refresh, clear_cache, reboot, vol_up, vol_down, sleep_screen, wake_screen, clear_cron</p>`;
             openModals("terminalModal", "terminalPanel", "terminalBackdrop");
             setTimeout(() => document.getElementById("term-input").focus(), 100);
         }
@@ -456,7 +696,7 @@
                 const inp = document.getElementById("term-input"); const cmd = inp.value.trim().toLowerCase(); const out = document.getElementById("term-output");
                 if (!cmd) return;
                 out.innerHTML += `<p><span class="text-green-500 font-bold">higa@admin:~$</span> <span class="cmd">${cmd}</span></p>`; inp.value = "";
-                const valid = ["refresh", "clear_cache", "reboot", "vol_up", "vol_down", "sleep_screen", "wake_screen"];
+                const valid = ["refresh", "clear_cache", "reboot", "vol_up", "vol_down", "sleep_screen", "wake_screen", "clear_cron"];
                 if (cmd === "clear") out.innerHTML = "";
                 else if (valid.includes(cmd)) { const ok = await sendCommand(ui.activeTermPc.id, cmd, {}, true); out.innerHTML += ok ? `<p class="ok">-> OK</p>` : `<p class="err">-> FALLÓ</p>`; }
                 else out.innerHTML += `<p class="err">-bash: ${cmd}: command not found</p>`;
@@ -472,13 +712,28 @@
             document.getElementById("empty-msg").style.display = filtered.length ? "none" : "flex";
 
             filtered.forEach((pc) => {
+                let dynamicBtnsGrid = "";
+                if (pc.customButtons && pc.customButtons.length > 0) {
+                    dynamicBtnsGrid = `<div class="flex flex-wrap gap-1.5 mb-3 pt-1 border-t border-slate-100 dark:border-zinc-800">` + 
+                        pc.customButtons.map(btn => {
+                            if(!btn.url) return "";
+                            return `<button onclick="sendCommand('${pc.id}','startup',{url:'${btn.url}'},false)" class="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-500 hover:text-white rounded-md text-[10px] font-bold py-1.5 px-2 transition-colors truncate max-w-full" title="${btn.url}"><i class="ph-bold ph-play mr-1"></i> ${btn.name || 'URL'}</button>`;
+                        }).join("") + `</div>`;
+                }
+
+                let cronBtnGrid = pc.cron ? 
+                    `<button onclick="openCronModal('${pc.id}')" class="flex-1 bg-purple-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500 hover:text-white font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center gap-1 h-7" title="Modificar Cron">🕘 ${pc.cron.on} - ${pc.cron.off}</button>` : 
+                    `<button onclick="openCronModal('${pc.id}')" class="flex-1 bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 hover:text-purple-500 text-slate-500 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center gap-1 h-7" title="Horarios de Encendido"><i class="ph-bold ph-clock text-xs"></i> CRON</button>`;
+
+                let leaderCrown = pc.ip === clusterLeader ? `<i class="ph-fill ph-crown text-amber-500 ml-1 text-[14px]" title="Nodo Capitán (Gestor Telegram)"></i>` : ``;
+
                 grid.innerHTML += `
                 <div class="bg-white dark:bg-surface-accent border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden flex flex-col shadow-sm group relative">
                     <button onclick="openTerminal('${pc.id}')" class="absolute top-2 left-2 z-10 bg-black/60 hover:bg-black text-green-400 p-1.5 rounded-lg backdrop-blur font-mono text-[10px] opacity-0 group-hover:opacity-100 transition-opacity border border-white/10" title="Terminal SSH">&gt;_</button>
                     <div class="p-3 border-b border-slate-100 dark:border-zinc-800/50 flex justify-between items-center bg-slate-50/30 dark:bg-zinc-900/30">
                         <div class="flex items-center gap-2.5 ml-8">
                             <div id="dot-${pc.id}" class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-zinc-700 shrink-0"></div>
-                            <div class="truncate max-w-[110px]"><h5 class="font-black text-xs truncate">${pc.name}</h5><p class="text-[9px] text-slate-500 font-mono">${pc.ip}</p></div>
+                            <div class="truncate max-w-[110px] flex items-center"><h5 class="font-black text-xs truncate">${pc.name}</h5>${leaderCrown}</div>
                         </div>
                         <div class="flex gap-1.5 shrink-0">
                             <div class="flex items-center gap-1 bg-white dark:bg-black px-1.5 py-1 rounded-md border border-slate-200 dark:border-zinc-800"><i class="ph-bold ph-speaker-high text-amber-500 text-[10px]"></i><span id="vol-${pc.id}" class="text-[9px] font-bold w-4 text-center">--</span></div>
@@ -493,26 +748,38 @@
                         </div>
                         <button onclick="event.stopPropagation(); takeScreenshot('${pc.id}')" class="absolute top-2 right-2 bg-white/10 hover:bg-white/30 p-2 rounded-lg text-white opacity-0 group-hover/img:opacity-100 transition-all z-10"><i id="cam-${pc.id}" class="ph-bold ph-camera-plus text-base"></i></button>
                     </div>
-                    <div class="p-3 flex flex-col gap-2 bg-slate-50 dark:bg-zinc-900/50">
-                        <div class="flex justify-between gap-1">
+                    <div class="p-3 flex flex-col bg-slate-50 dark:bg-zinc-900/50">
+                        ${dynamicBtnsGrid}
+                        <div class="flex justify-between gap-1 mb-2">
                             <div class="flex bg-white dark:bg-black rounded-lg border border-slate-200 dark:border-zinc-800 shrink-0">
                                 <button onclick="sendCommand('${pc.id}','vol_down')" class="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-l-lg text-slate-500 hover:text-brand-500"><i class="ph-bold ph-minus text-xs"></i></button>
                                 <button onclick="sendCommand('${pc.id}','vol_up')" class="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-r-lg text-slate-500 hover:text-brand-500 border-l border-slate-200 dark:border-zinc-800"><i class="ph-bold ph-plus text-xs"></i></button>
                             </div>
-                            
                             <button onclick="sendCommand('${pc.id}','refresh')" class="flex-1 bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 hover:border-brand-500 text-slate-700 dark:text-zinc-300 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center gap-1" title="F5"><i class="ph-bold ph-arrows-clockwise text-xs"></i></button>
-                            
-                            <button onclick="askIndividualUrl('${pc.id}')" class="w-8 bg-brand-50 dark:bg-brand-900/20 text-brand-600 border border-brand-200 dark:border-brand-800 hover:bg-brand-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Forzar URL Específica"><i class="ph-bold ph-link text-xs"></i></button>
+                            <button onclick="sendCommand('${pc.id}','startup',{url: db.globalDefault},false)" class="w-8 bg-brand-50 dark:bg-brand-900/20 text-brand-600 border border-brand-200 dark:border-brand-800 hover:bg-brand-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Lanzar URL Global"><i class="ph-bold ph-globe text-sm"></i></button>
+                            <button onclick="askIndividualUrl('${pc.id}')" class="w-8 bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-zinc-700 hover:bg-slate-300 dark:hover:bg-zinc-600 rounded-lg flex items-center justify-center transition-colors" title="Forzar URL Manual (Ad-hoc)"><i class="ph-bold ph-link text-sm"></i></button>
                         </div>
                         <div class="flex justify-between gap-1">
-                            <button onclick="askCronSchedule('${pc.id}')" class="flex-1 bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 hover:text-purple-500 text-slate-500 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center gap-1 h-7" title="Horarios de Encendido"><i class="ph-bold ph-clock text-xs"></i> CRON</button>
+                            ${cronBtnGrid}
                             <button onclick="sendCommand('${pc.id}','startup',{url: db.maintUrl})" class="w-8 h-7 bg-orange-500/10 text-orange-600 border border-orange-500/20 hover:bg-orange-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Mantenimiento"><i class="ph-fill ph-warning text-sm"></i></button>
                             <button onclick="sendCommand('${pc.id}','reboot',{},true)" class="w-8 h-7 bg-red-500/10 text-red-600 border border-red-500/20 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Reiniciar Hard"><i class="ph-bold ph-power text-sm"></i></button>
                         </div>
                     </div>
                 </div>`;
 
-                list.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-zinc-800/30 transition-colors"><td class="px-4 py-3"><div id="ldot-${pc.id}" class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-zinc-800"></div></td><td class="px-4 py-3 font-black text-xs text-slate-800 dark:text-zinc-200">${pc.name}</td><td class="px-4 py-3"><div class="font-mono text-[10px] text-slate-500">${pc.ip}</div><div class="font-mono text-[9px] text-slate-400">${pc.mac || "--"}</div></td><td class="px-4 py-3"><div class="flex gap-1.5"><button onclick="askIndividualUrl('${pc.id}')" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-brand-500"><i class="ph-bold ph-link text-sm"></i></button><button onclick="sendCommand('${pc.id}','reboot',{},true)" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-red-500"><i class="ph-bold ph-power text-sm"></i></button><button onclick="openTerminal('${pc.id}')" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-emerald-500"><i class="ph-bold ph-terminal-window text-sm"></i></button></div></td></tr>`;
+                list.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-zinc-800/30 transition-colors">
+                    <td class="px-4 py-3"><div id="ldot-${pc.id}" class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-zinc-800"></div></td>
+                    <td class="px-4 py-3 font-black text-xs text-slate-800 dark:text-zinc-200 flex items-center">${pc.name} ${leaderCrown}</td>
+                    <td class="px-4 py-3"><div class="font-mono text-[10px] text-slate-500">${pc.ip}</div><div class="font-mono text-[9px] text-slate-400">${pc.mac || "--"}</div></td>
+                    <td class="px-4 py-3 text-right">
+                        <div class="flex gap-1.5 justify-end">
+                            <button onclick="sendCommand('${pc.id}','startup',{url: db.globalDefault},false)" class="p-1.5 bg-brand-50 dark:bg-brand-900/20 text-brand-600 rounded-md hover:bg-brand-500 hover:text-white" title="Lanzar URL Global"><i class="ph-bold ph-globe text-sm"></i></button>
+                            <button onclick="askIndividualUrl('${pc.id}')" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-slate-500" title="URL Manual"><i class="ph-bold ph-link text-sm"></i></button>
+                            <button onclick="openCronModal('${pc.id}')" class="p-1.5 rounded-md ${pc.cron ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-600' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:text-purple-500'}" title="Cron"><i class="ph-bold ph-clock text-sm"></i></button>
+                            <button onclick="sendCommand('${pc.id}','reboot',{},true)" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-red-500"><i class="ph-bold ph-power text-sm"></i></button>
+                        </div>
+                    </td>
+                </tr>`;
             });
         }
 
@@ -523,7 +790,7 @@
             const nav = document.getElementById("sidebar-nav"); if (!nav) return;
             nav.innerHTML = ["Todos", ...db.sectors.sort()].map((s) => {
                 const act = ui.tab === s; const c = s === "Todos" ? db.pcs.length : db.pcs.filter((p) => p.sector === s).length;
-                return `<button onclick="setTab('${s}')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex justify-between items-center ${act ? "bg-brand-500 text-white" : "text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800"}"><span>${s}</span><span class="text-[9px] px-1.5 py-0.5 rounded-md ${act ? "bg-brand-700" : "bg-slate-200 dark:bg-zinc-900"}">${c}</span></button>`;
+                return `<button onclick="setTab('${s}')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex justify-between items-center ${act ? "bg-brand-500 text-white" : "text-slate-500 hover:bg-slate-100 dark:bg-zinc-800"}"><span>${s}</span><span class="text-[9px] px-1.5 py-0.5 rounded-md ${act ? "bg-brand-700" : "bg-slate-200 dark:bg-zinc-900"}">${c}</span></button>`;
             }).join("");
             const titleEl = document.getElementById("current-sector-title"); if (titleEl) titleEl.innerText = ui.tab === "Todos" ? "Infraestructura" : ui.tab;
         }
@@ -549,19 +816,60 @@
         function openModals(i, p, b) { document.getElementById(i).classList.remove("hidden"); setTimeout(() => { document.getElementById(b).classList.replace("opacity-0", "opacity-100"); document.getElementById(p).classList.replace("scale-95", "scale-100"); document.getElementById(p).classList.replace("opacity-0", "opacity-100"); }, 10); }
         function closeModals() { ["config", "image", "terminal"].forEach((m) => { const w = document.getElementById(`${m}Modal`), p = document.getElementById(`${m}Panel`), b = document.getElementById(`${m}Backdrop`); if (w && !w.classList.contains("hidden")) { b.classList.replace("opacity-100", "opacity-0"); p.classList.replace("scale-100", "scale-95"); p.classList.replace("opacity-100", "opacity-0"); setTimeout(() => w.classList.add("hidden"), 200); } }); }
 
-        function openConfig() { document.getElementById("cfg-token").value = db.masterPass; document.getElementById("cfg-base").value = db.globalDefault; document.getElementById("cfg-panic").value = db.maintUrl; document.getElementById("cfg-tg-token").value = db.tgToken; document.getElementById("cfg-tg-chat").value = db.tgChat; document.getElementById("cfg-ota-url").value = db.otaUrl || ""; renderTaxList(); renderPCList(); openModals("configModal", "configPanel", "configBackdrop"); }
+        function openConfig() { document.getElementById("cfg-token").value = clientConfig.masterPass; document.getElementById("cfg-base").value = db.globalDefault; document.getElementById("cfg-panic").value = db.maintUrl; document.getElementById("cfg-tg-token").value = db.tgToken; document.getElementById("cfg-tg-chat").value = db.tgChat; document.getElementById("cfg-ota-url").value = db.otaUrl || ""; renderTaxList(); renderPCList(); openModals("configModal", "configPanel", "configBackdrop"); }
         function switchTab(id) { document.querySelectorAll(".tab-content").forEach((c) => c.classList.add("hidden")); document.getElementById(id).classList.remove("hidden"); document.querySelectorAll(".config-tab-btn").forEach((b) => b.classList.remove("config-active-tab")); document.getElementById(`btn-${id}`).classList.add("config-active-tab"); }
 
-        function saveAll() { db.masterPass = document.getElementById("cfg-token").value.trim(); db.globalDefault = document.getElementById("cfg-base").value.trim(); db.maintUrl = document.getElementById("cfg-panic").value.trim(); db.tgToken = document.getElementById("cfg-tg-token").value.trim(); db.tgChat = document.getElementById("cfg-tg-chat").value.trim(); db.otaUrl = document.getElementById("cfg-ota-url").value.trim(); localStorage.setItem("miki_v13_db", JSON.stringify(db)); renderSectorsNav(); updateUIGrid(); closeModals(); showToast("Configuración Guardada", "success"); }
+        function saveAllAndSync() { 
+            clientConfig.masterPass = document.getElementById("cfg-token").value.trim();
+            localStorage.setItem("miki_client_conf", JSON.stringify(clientConfig));
+            db.globalDefault = document.getElementById("cfg-base").value.trim(); 
+            db.maintUrl = document.getElementById("cfg-panic").value.trim(); 
+            db.tgToken = document.getElementById("cfg-tg-token").value.trim(); 
+            db.tgChat = document.getElementById("cfg-tg-chat").value.trim(); 
+            db.otaUrl = document.getElementById("cfg-ota-url").value.trim(); 
+            
+            pushDbToCluster();
+            renderSectorsNav(); updateUIGrid(); closeModals(); 
+        }
 
         function renderTaxList() { document.getElementById("list-sectores").innerHTML = db.sectors.map((s) => `<li class="flex justify-between items-center p-3 font-bold border-b border-slate-100 dark:border-zinc-800 last:border-0"><span>${s}</span><button onclick="db.sectors=db.sectors.filter(x=>x!=='${s}');renderTaxList()" class="text-red-500 hover:text-red-700 bg-red-500/10 p-1.5 rounded-md">Eliminar</button></li>`).join(""); }
         function addSector() { const v = document.getElementById("new-sector").value.trim(); if (v && !db.sectors.includes(v)) { db.sectors.push(v); document.getElementById("new-sector").value = ""; renderTaxList(); } }
         
+        function addCustomBtn(pcIndex) { if (!db.pcs[pcIndex].customButtons) db.pcs[pcIndex].customButtons = []; db.pcs[pcIndex].customButtons.push({name: "", url: ""}); renderPCList(); }
+        function removeCustomBtn(pcIndex, btnIndex) { db.pcs[pcIndex].customButtons.splice(btnIndex, 1); renderPCList(); }
+
         function renderPCList() {
             const sectorOpts = db.sectors.map((s) => `<option value="${s}">${s}</option>`).join("");
-            document.getElementById("list-equipos").innerHTML = db.pcs.map((pc, i) => `<div class="bg-white dark:bg-zinc-900 p-3 mb-3 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm relative"><button onclick="db.pcs.splice(${i},1);renderPCList()" class="absolute top-3 right-3 text-red-500 hover:text-red-700 bg-red-500/10 p-1.5 rounded-md text-[10px] font-bold">Quitar</button><div class="grid grid-cols-1 md:grid-cols-4 gap-3 mr-16"><div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">Nombre</label><input value="${pc.name}" onchange="db.pcs[${i}].name=this.value" class="w-full bg-slate-100 dark:bg-black p-2 rounded-lg border border-transparent focus:border-brand-500 outline-none text-xs"></div><div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">IP LAN</label><input value="${pc.ip}" onchange="db.pcs[${i}].ip=this.value" class="w-full bg-slate-100 dark:bg-black p-2 rounded-lg border border-transparent focus:border-brand-500 outline-none text-xs font-mono"></div><div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">MAC</label><input value="${pc.mac || ""}" disabled class="w-full bg-slate-200 dark:bg-zinc-800 p-2 rounded-lg border border-transparent outline-none text-xs font-mono text-slate-500"></div><div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">Sector</label><select onchange="db.pcs[${i}].sector=this.value" class="w-full bg-slate-100 dark:bg-black p-2 rounded-lg border border-transparent focus:border-brand-500 outline-none text-xs"><option hidden>${pc.sector}</option>${sectorOpts}</select></div></div></div>`).join("");
+            document.getElementById("list-equipos").innerHTML = db.pcs.map((pc, i) => {
+                let btnsHtml = pc.customButtons && pc.customButtons.length > 0 ? 
+                    pc.customButtons.map((btn, j) => `
+                        <div class="flex gap-2 items-center mb-2">
+                            <button onclick="removeCustomBtn(${i}, ${j})" class="text-red-500 hover:text-red-700 bg-red-500/10 p-1.5 rounded-md transition-colors" title="Eliminar botón"><i class="ph-bold ph-trash"></i></button>
+                            <input value="${btn.name}" onchange="db.pcs[${i}].customButtons[${j}].name=this.value" placeholder="Nombre (Ej: Lab)" class="w-1/4 bg-white dark:bg-zinc-900 p-1.5 rounded-md border border-slate-200 dark:border-zinc-700 outline-none text-xs">
+                            <input value="${btn.url}" onchange="db.pcs[${i}].customButtons[${j}].url=this.value" placeholder="https://..." class="flex-1 bg-white dark:bg-zinc-900 p-1.5 rounded-md border border-slate-200 dark:border-zinc-700 outline-none text-xs font-mono text-emerald-600">
+                        </div>
+                    `).join("") : `<p class="text-xs text-slate-500 italic mt-1">Sin botones extra.</p>`;
+
+                return `
+                <div class="bg-white dark:bg-zinc-900 p-4 mb-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm relative">
+                    <button onclick="db.pcs.splice(${i},1);renderPCList()" class="absolute top-4 right-4 text-red-500 hover:text-red-700 bg-red-500/10 px-2 py-1.5 rounded-md text-[10px] font-bold transition-colors">Quitar PC</button>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mr-24 mb-4">
+                        <div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">Nombre</label><input value="${pc.name}" onchange="db.pcs[${i}].name=this.value" class="w-full bg-slate-100 dark:bg-black p-2 rounded-lg border border-transparent focus:border-brand-500 outline-none text-xs"></div>
+                        <div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">IP LAN</label><input value="${pc.ip}" onchange="db.pcs[${i}].ip=this.value" class="w-full bg-slate-100 dark:bg-black p-2 rounded-lg border border-transparent focus:border-brand-500 outline-none text-xs font-mono"></div>
+                        <div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">MAC</label><input value="${pc.mac || ""}" disabled class="w-full bg-slate-200 dark:bg-zinc-800 p-2 rounded-lg border border-transparent outline-none text-xs font-mono text-slate-500"></div>
+                        <div><label class="text-[9px] font-black text-slate-400 uppercase block mb-1">Sector</label><select onchange="db.pcs[${i}].sector=this.value" class="w-full bg-slate-100 dark:bg-black p-2 rounded-lg border border-transparent focus:border-brand-500 outline-none text-xs"><option hidden>${pc.sector}</option>${sectorOpts}</select></div>
+                    </div>
+                    <div class="bg-slate-50 dark:bg-black/40 p-3 rounded-lg border border-slate-100 dark:border-zinc-800/50">
+                        <div class="flex justify-between items-center mb-2 border-b border-slate-200 dark:border-zinc-800/50 pb-2">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"><i class="ph-fill ph-push-pin text-brand-500"></i> Botones Rápidos de URL</span>
+                            <button onclick="addCustomBtn(${i})" class="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white px-2 py-1 rounded text-[10px] font-bold transition-colors flex items-center gap-1"><i class="ph-bold ph-plus"></i> Añadir Botón</button>
+                        </div>
+                        ${btnsHtml}
+                    </div>
+                </div>`;
+            }).join("");
         }
-        function addPC() { db.pcs.push({ id: Date.now(), name: "Nueva Terminal", ip: "", mac: "", sector: db.sectors[0] }); renderPCList(); }
+        function addPC() { db.pcs.push({ id: Date.now(), name: "Nueva Terminal", ip: "", mac: "", sector: db.sectors[0], customButtons: [], cron: null }); renderPCList(); }
         function openImageModal(id) { const img = document.getElementById(`img-${id}`); if (img) { document.getElementById("modal-img").src = img.src; openModals("imageModal", "imagePanel", "imageBackdrop"); } }
 
         init();
