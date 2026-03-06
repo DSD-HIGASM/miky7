@@ -8,7 +8,7 @@ from config import BACKEND_TOKEN
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # =================================================================
-# INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO CLARA
+# INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO
 # =================================================================
 def setup_mantenimiento_ui():
     html_path = os.path.expanduser("~/control_remoto/mantenimiento.html")
@@ -69,10 +69,10 @@ def setup_mantenimiento_ui():
 try:
     setup_mantenimiento_ui()
 except Exception as e:
-    logging.error(f"Fallo en configuraciones iniciales: {e}")
+    logging.error(f"Fallo inicial: {e}")
 
 # =================================================================
-# VARIABLES Y BASE DE DATOS LOCAL
+# BASE DE DATOS Y RED
 # =================================================================
 STARTUP_URL_FILE = os.path.expanduser("~/kiosko_startup.url")
 CACHE_DIR = os.path.expanduser("~/.config/chromium-kiosko-hsi/Default/Cache/*")
@@ -88,25 +88,21 @@ def load_db():
 def save_db(data):
     try:
         with open(DB_FILE, 'w') as f: json.dump(data, f)
-    except Exception as e:
-        logging.error(f"Error guardando DB: {e}")
+    except: pass
 
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(('10.255.255.255', 1))
         ip = s.getsockname()[0]
-    except Exception:
-        ip = '127.0.0.1'
-    finally:
-        s.close()
+    except: ip = '127.0.0.1'
+    finally: s.close()
     return ip
 
 # =================================================================
-# WATCHDOG FAILOVER: Auto-curación ante caída de HSI
+# WATCHDOG FAILOVER
 # =================================================================
 hsi_is_down = False
-
 def watchdog_hsi():
     global hsi_is_down
     maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
@@ -116,60 +112,49 @@ def watchdog_hsi():
         time.sleep(15) 
         try:
             with open(STARTUP_URL_FILE, 'r') as f: target_url = f.read().strip()
-        except:
-            continue
+        except: continue
             
-        if "mantenimiento.html" in target_url or not target_url.startswith("http"):
-            continue
-
+        if "mantenimiento.html" in target_url or not target_url.startswith("http"): continue
         current_status_down = False
         try:
             req = urllib.request.Request(target_url, headers={'User-Agent': 'Miki/Failover'})
             with urllib.request.urlopen(req, timeout=7) as response:
-                if response.status >= 500:
-                    current_status_down = True
+                if response.status >= 500: current_status_down = True
         except HTTPError as e:
             if e.code >= 500: current_status_down = True
-        except URLError:
-            current_status_down = True
-        except Exception:
-            current_status_down = True
+        except URLError: current_status_down = True
+        except Exception: current_status_down = True
 
         if current_status_down and not hsi_is_down:
             hsi_is_down = True
-            logging.info("HSI CAÍDA: Failover visual activado.")
             cmd = f"export DISPLAY=:0 && pkill chromium && sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
             subprocess.Popen(cmd, shell=True)
-            
         elif not current_status_down and hsi_is_down:
             hsi_is_down = False
-            logging.info("HSI RECUPERADA: Restaurando turnero.")
             subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
 
 threading.Thread(target=watchdog_hsi, daemon=True).start()
 
 # =================================================================
-# CLÚSTER MESH: Elección de Líder y Notificaciones
+# CLÚSTER MESH: V3.1 - Liderazgo Estricto
 # =================================================================
 current_leader = None
 offline_counters = {}
 known_status = {}
 
-def get_tg_timestamp():
-    return time.strftime("%d/%m/%Y %H:%M:%S")
+def get_tg_timestamp(): return time.strftime("%d/%m/%Y %H:%M:%S")
 
 def send_telegram(token, chat, text):
     if not token or not chat: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = json.dumps({"chat_id": chat, "text": text, "parse_mode": "HTML"}).encode('utf-8')
     req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'})
-    try:
-        urllib.request.urlopen(req, timeout=5)
-    except Exception as e:
-        logging.error(f"Fallo Telegram: {e}")
+    try: urllib.request.urlopen(req, timeout=5)
+    except: pass
 
 def mesh_network_engine():
     global current_leader, offline_counters, known_status
+    first_run = True
     while True:
         time.sleep(10)
         db = load_db()
@@ -177,45 +162,46 @@ def mesh_network_engine():
         if not pcs: continue
 
         my_ip = get_local_ip()
-        alive_ips = []
+        alive_ips = [my_ip]
         
+        # 1. Ping general para conocer el estado real de la red
         for pc in pcs:
             ip = pc.get("ip")
-            if not ip: continue
-            
-            # Ping interno
+            if not ip or ip == my_ip: continue
             try:
-                if ip == my_ip:
-                    alive_ips.append(ip)
-                    continue
-                    
                 req = urllib.request.Request(f"http://{ip}:5000/status")
                 with urllib.request.urlopen(req, timeout=3) as response:
-                    if response.status == 200:
-                        alive_ips.append(ip)
-                        offline_counters[ip] = 0
-                        if known_status.get(ip) is False:
-                            known_status[ip] = True
-                            if current_leader == my_ip:
-                                msg = f"✅ <b>SISTEMA RESTAURADO</b>\n🖥️ {pc.get('name', 'Desc')}\n🌐 <code>{ip}</code>\n🕒 {get_tg_timestamp()}"
-                                send_telegram(db.get("tgToken"), db.get("tgChat"), msg)
-            except:
-                offline_counters[ip] = offline_counters.get(ip, 0) + 1
-                if offline_counters[ip] >= 4 and known_status.get(ip, True) is True:
-                    known_status[ip] = False
-                    if current_leader == my_ip:
-                        msg = f"🚨 <b>ALERTA CRÍTICA: OFFLINE</b>\n🖥️ {pc.get('name', 'Desc')}\n🌐 <code>{ip}</code>\n🕒 {get_tg_timestamp()}"
-                        send_telegram(db.get("tgToken"), db.get("tgChat"), msg)
+                    if response.status == 200: alive_ips.append(ip)
+            except: pass
 
-        # Regla determinista de elección de líder por IP más baja
-        if alive_ips:
-            try:
-                sorted_ips = sorted(alive_ips, key=lambda x: [int(p) for p in x.split('.')])
-                current_leader = sorted_ips[0]
-            except:
-                current_leader = my_ip
-        else:
+        # 2. Elección Estricta del Líder (Antes de evaluar caídas)
+        try:
+            sorted_ips = sorted(alive_ips, key=lambda x: [int(p) for p in x.split('.')])
+            current_leader = sorted_ips[0]
+        except:
             current_leader = my_ip
+
+        # 3. Procesar estados y Enviar Telegram (Solo si soy el Líder actual)
+        for pc in pcs:
+            ip = pc.get("ip")
+            if not ip or ip == my_ip: continue
+
+            if ip in alive_ips:
+                offline_counters[ip] = 0
+                if known_status.get(ip, True) is False:
+                    known_status[ip] = True
+                    if current_leader == my_ip and not first_run:
+                        msg = f"✅ <b>SISTEMA RESTAURADO</b>\n🖥️ {pc.get('name')}\n🌐 <code>{ip}</code>\n🕒 {get_tg_timestamp()}"
+                        send_telegram(db.get("tgToken"), db.get("tgChat"), msg)
+            else:
+                offline_counters[ip] = offline_counters.get(ip, 0) + 1
+                if offline_counters[ip] >= 3 and known_status.get(ip, True) is True:
+                    known_status[ip] = False
+                    if current_leader == my_ip and not first_run:
+                        msg = f"🚨 <b>ALERTA CRÍTICA: OFFLINE</b>\n🖥️ {pc.get('name')}\n🌐 <code>{ip}</code>\n🕒 {get_tg_timestamp()}"
+                        send_telegram(db.get("tgToken"), db.get("tgChat"), msg)
+        
+        first_run = False
 
 threading.Thread(target=mesh_network_engine, daemon=True).start()
 
@@ -227,8 +213,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 def verificar_auth(req):
     token = req.headers.get('Authorization')
-    if token and "Bearer" in token:
-        return token.split(" ")[1] == BACKEND_TOKEN
+    if token and "Bearer" in token: return token.split(" ")[1] == BACKEND_TOKEN
     return False
 
 def run_cmd(cmd):
@@ -237,21 +222,17 @@ def run_cmd(cmd):
         full_cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && {cmd}"
         subprocess.run(full_cmd, shell=True, check=True)
         return True
-    except Exception as e:
-        logging.error(f"Error ejecutando {cmd}: {e}")
-        return False
+    except: return False
 
 def get_mac():
     try:
         mac_num = hex(uuid.getnode()).replace('0x', '').upper()
-        mac_num = mac_num.zfill(12)
-        return ':'.join(mac_num[i: i + 2] for i in range(0, 11, 2))
+        return ':'.join(mac_num.zfill(12)[i: i + 2] for i in range(0, 11, 2))
     except: return "00:00:00:00:00:00"
 
 def send_wol(macaddress):
     try:
-        macaddress = macaddress.replace(':', '').replace('-', '')
-        data = bytes.fromhex('FF' * 6 + macaddress * 16)
+        data = bytes.fromhex('FF' * 6 + macaddress.replace(':', '').replace('-', '') * 16)
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.sendto(data, ('255.255.255.255', 9))
@@ -261,14 +242,12 @@ def send_wol(macaddress):
 @app.route('/sync', methods=['GET'])
 def get_sync():
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
-    db_data = load_db()
-    return jsonify({"db": db_data, "current_leader": current_leader, "my_ip": get_local_ip()})
+    return jsonify({"db": load_db(), "current_leader": current_leader, "my_ip": get_local_ip()})
 
 @app.route('/sync', methods=['POST'])
 def post_sync():
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
-    new_db = request.json
-    save_db(new_db)
+    save_db(request.json)
     return jsonify({"status": "ok"})
 
 @app.route('/status', methods=['GET'])
@@ -281,12 +260,10 @@ def status():
     vol = "0"
     try:
         uid = os.getuid()
-        cmd_vol = f"export XDG_RUNTIME_DIR=/run/user/{uid} && pactl get-sink-volume @DEFAULT_SINK@"
-        output = subprocess.check_output(cmd_vol, shell=True, stderr=subprocess.DEVNULL).decode()
+        output = subprocess.check_output(f"export XDG_RUNTIME_DIR=/run/user/{uid} && pactl get-sink-volume @DEFAULT_SINK@", shell=True, stderr=subprocess.DEVNULL).decode()
         match = re.search(r"(\d+)%", output)
         if match: vol = match.group(1)
-    except Exception as e:
-        vol = "Err"
+    except: vol = "Err"
     return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac(), "leader": current_leader})
 
 @app.route('/set_startup', methods=['POST'])
@@ -314,9 +291,8 @@ def control():
         return jsonify({"error": "Falta URL"}), 400
     elif acc == 'wol':
         target_mac = request.json.get('mac')
-        if target_mac:
-            send_wol(target_mac)
-            return jsonify({"status": "ok"})
+        if target_mac: send_wol(target_mac)
+        return jsonify({"status": "ok"})
     elif acc == 'sleep_screen': run_cmd("xset dpms force off")
     elif acc == 'wake_screen': run_cmd("xset dpms force on && xdotool mousemove 500 500 click 1 && xdotool mousemove 0 0")
     elif acc == 'schedule_power':
