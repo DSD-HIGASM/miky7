@@ -41,7 +41,7 @@ MIKI HSI es una arquitectura completa de gestión de pantallas y terminales Kios
 Para instalar una nueva terminal desde cero (Mini-PC EXO o similar), conecta un teclado, abre la terminal y ejecuta este único comando:
 
 ```bash
-wget -qO instalar.sh "[[https://raw.githubusercontent.com/TU_USUARIO/TU_REPO/main/instalar.sh](https://raw.githubusercontent.com/DSD-HIGASM/miky7/refs/heads/main/install.sh)]([https://raw.githubusercontent.com/TU_USUARIO/TU_REPO/main/instalar.sh](https://raw.githubusercontent.com/DSD-HIGASM/miky7/refs/heads/main/install.sh))" && bash instalar.sh
+wget -qO instalar.sh "https://raw.githubusercontent.com/DSD-HIGASM/miky7/refs/heads/main/install.sh" && bash instalar.sh
 ```
 
 El instalador realizará los siguientes pasos automáticamente:
