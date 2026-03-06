@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =====================================================================
-#  MIKI KIOSKO HSI - INSTALADOR MAESTRO V15 (Zero-Touch + SSH + URL Raw)
+#  MIKY KIOSKO HSI - INSTALADOR MAESTRO (Zero-Touch + SSH + URL Raw)
 #  Arquitectura: Limpieza total + Systemd + Gunicorn + OTA + Failover
 # =====================================================================
 
@@ -41,7 +41,7 @@ echo " "
 
 echo -e "🏥 ${BLUE}Configuración de la Institución (Marca Blanca)${NC}"
 read -p "➤ Ingrese el Nombre del Establecimiento [Ej: HIGA San Martín]: " HOSP_NAME
-HOSP_NAME=${HOSP_NAME:-"Hospital Local"}
+HOSP_NAME=${HOSP_NAME:-"Establecimiento de Salud"}
 
 read -p "➤ Ingrese la URL del Logo del Establecimiento (JPG/PNG): " LOGO_URL
 LOGO_URL=${LOGO_URL:-"https://hospitalsanmartin.ar/wp-content/uploads/2024/02/cropped-WhatsApp-Image-2024-01-29-at-10.39.37.jpeg"}
@@ -84,7 +84,7 @@ STARTUP_FILE="$HOME/kiosko_startup.url"
 if [ -f "$STARTUP_FILE" ]; then
     TARGET_URL=$(cat "$STARTUP_FILE")
 else
-    TARGET_URL="https://llamador-shc.ms.gba.gov.ar"
+    TARGET_URL=""
 fi
 pkill chromium
 pkill chrome
@@ -114,7 +114,7 @@ chmod +x "$INSTALL_DIR/agent.py"
 echo -e "⚙️  ${BLUE}Inyectando Agente en Systemd Daemon...${NC}"
 cat << EOF | sudo tee /etc/systemd/system/miki_agent.service > /dev/null
 [Unit]
-Description=Miki Kiosk Backend Agent (Gunicorn)
+Description=Miky Kiosk Backend Agent (Gunicorn)
 After=network.target
 
 [Service]
@@ -144,7 +144,7 @@ Exec=/bin/bash $USER_HOME/iniciar_kiosko.sh
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
-Name=Miki Kiosk
+Name=Miky Kiosk
 Comment=Frontend Web
 EOF
 
@@ -155,15 +155,15 @@ Exec=x11vnc -display :0 -forever -usepw -shared -rfbport 5900 -bg
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
-Name=Miki VNC
+Name=Miky VNC
 Comment=Remote Desktop
 EOF
 
 # 10. FIREWALL
 echo -e "🛡️  ${BLUE}Aplicando políticas de red (UFW)...${NC}"
-sudo ufw allow 5000/tcp comment 'Miki Web Agent'
-sudo ufw allow 5900/tcp comment 'Miki VNC'
-sudo ufw allow 22/tcp comment 'Miki SSH'
+sudo ufw allow 5000/tcp comment 'Miky Web Agent'
+sudo ufw allow 5900/tcp comment 'Miky VNC'
+sudo ufw allow 22/tcp comment 'Miky SSH'
 
 echo -e "${GREEN}======================================================${NC}"
 echo -e "${GREEN} ✅ INSTALACIÓN ZERO-TOUCH FINALIZADA CON ÉXITO ✅ ${NC}"
