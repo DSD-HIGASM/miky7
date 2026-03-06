@@ -17,6 +17,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # =================================================================
 def setup_mantenimiento_ui():
     html_path = os.path.expanduser("~/control_remoto/mantenimiento.html")
+    # HTML ajustado para el motor de escalado de Chromium en Kiosko (TVs)
     html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -51,7 +52,7 @@ def setup_mantenimiento_ui():
         }
         
         .pba-gradient-bar {
-            height: 22px;
+            height: 16px;
             width: 100%;
             background: linear-gradient(90deg, var(--pba-pink) 0%, var(--pba-blue) 50%, var(--pba-cyan) 100%);
             flex-shrink: 0;
@@ -60,58 +61,58 @@ def setup_mantenimiento_ui():
         .content-wrapper {
             flex: 1; display: flex; flex-direction: column;
             align-items: center; justify-content: center;
-            padding: 3rem 4rem;
+            padding: 2rem;
         }
 
         .glass-card {
             background: var(--card-bg);
-            border-radius: 2.5rem;
-            padding: 6rem 8rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0,0,0,0.02);
+            border-radius: 1.5rem;
+            padding: 3.5rem 5rem;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0,0,0,0.02);
             text-align: center;
-            max-width: 85vw;
+            max-width: 80vw;
             display: flex; flex-direction: column; align-items: center;
         }
 
         .icon-container {
             background-color: rgba(232, 31, 118, 0.08); 
             border-radius: 50%;
-            padding: 2.5rem;
-            margin-bottom: 2.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
             animation: pulse-soft 3s ease-in-out infinite;
         }
 
         .warning-icon {
-            width: 100px; height: 100px; 
+            width: 70px; height: 70px; 
             color: var(--pba-pink);
         }
 
         h1 {
-            font-size: 5.2rem; font-weight: 900;
+            font-size: 3.2rem; font-weight: 900;
             color: var(--text-main);
-            margin: 0 0 1.5rem 0;
+            margin: 0 0 1rem 0;
             text-transform: uppercase; 
             letter-spacing: -1px; line-height: 1.1;
         }
 
         .subtitle {
-            font-size: 3.2rem; font-weight: 400;
+            font-size: 1.8rem; font-weight: 400;
             color: var(--text-muted);
-            margin: 0 0 4.5rem 0;
+            margin: 0 0 3rem 0;
             line-height: 1.3;
         }
 
         .instruction-box {
             background: rgba(65, 112, 153, 0.06); 
             border: 2px solid rgba(65, 112, 153, 0.15);
-            border-left: 14px solid var(--pba-blue);
-            padding: 4rem 5.5rem;
-            border-radius: 1rem 2rem 2rem 1rem;
+            border-left: 10px solid var(--pba-blue);
+            padding: 2.5rem 4rem;
+            border-radius: 1rem 1.5rem 1.5rem 1rem;
             display: inline-block;
         }
 
         .instruction-box p {
-            font-size: 3.8rem; font-weight: 500;
+            font-size: 2.2rem; font-weight: 500;
             color: var(--text-main);
             margin: 0; line-height: 1.35;
         }
@@ -123,8 +124,8 @@ def setup_mantenimiento_ui():
 
         .footer-bar {
             background-color: var(--card-bg);
-            padding: 0 5rem;
-            height: 160px;
+            padding: 0 4rem;
+            height: 110px;
             display: flex; justify-content: space-between; align-items: center;
             border-top: 1px solid rgba(0,0,0,0.08);
             box-shadow: 0 -4px 20px rgba(0,0,0,0.03);
@@ -132,51 +133,52 @@ def setup_mantenimiento_ui():
         }
 
         .footer-logos {
-            display: flex; align-items: center; gap: 3rem;
+            display: flex; align-items: center; gap: 2.5rem;
             height: 100%;
         }
 
         .logo-separator {
-            height: 65px;
+            height: 45px;
             width: 2px;
             background-color: #cbd5e1;
             border-radius: 2px;
         }
 
         .logo-provincia {
-            height: 85px; width: auto;
+            height: 55px; width: auto;
             object-fit: contain;
             mix-blend-mode: multiply;
         }
 
         .logo-hospital {
-            height: 90px; width: auto;
+            height: 60px; width: auto;
+            max-width: 250px;
             object-fit: contain;
             mix-blend-mode: multiply;
         }
 
         .reconnect-status {
-            display: flex; align-items: center; gap: 1.5rem;
+            display: flex; align-items: center; gap: 1rem;
             background: var(--bg-main);
-            padding: 1.8rem 3.5rem; border-radius: 100px;
+            padding: 1.2rem 2.5rem; border-radius: 100px;
             border: 1px solid rgba(0,0,0,0.05);
         }
 
         .spinner {
-            width: 32px; height: 32px;
-            border: 5px solid rgba(0, 174, 195, 0.2);
+            width: 22px; height: 22px;
+            border: 4px solid rgba(0, 174, 195, 0.2);
             border-top-color: var(--pba-cyan);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
 
         .reconnect-status span {
-            font-size: 1.6rem; font-weight: 700; color: var(--pba-cyan); text-transform: uppercase; letter-spacing: 1.5px;
+            font-size: 1.2rem; font-weight: 700; color: var(--pba-cyan); text-transform: uppercase; letter-spacing: 1px;
         }
 
         @keyframes pulse-soft {
             0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(232, 31, 118, 0.2); }
-            50% { transform: scale(1.02); box-shadow: 0 0 0 20px rgba(232, 31, 118, 0); }
+            50% { transform: scale(1.02); box-shadow: 0 0 0 15px rgba(232, 31, 118, 0); }
         }
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
@@ -214,7 +216,6 @@ def setup_mantenimiento_ui():
 </body>
 </html>"""
 
-    # Inyección de variable python dentro del string de forma segura
     html_content = html_content.replace("{HOSPITAL_NAME}", HOSPITAL_NAME)
 
     os.makedirs(os.path.dirname(html_path), exist_ok=True)
@@ -423,7 +424,6 @@ def set_startup():
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     url = request.json.get('url')
     
-    # RESOLUCIÓN DINÁMICA: Si el panel pide la URL local, el agente descubre su propio usuario
     if url == "local":
         url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
         
