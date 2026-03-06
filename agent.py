@@ -422,6 +422,11 @@ def status():
 def set_startup():
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     url = request.json.get('url')
+    
+    # RESOLUCIÓN DINÁMICA: Si el panel pide la URL local, el agente descubre su propio usuario
+    if url == "local":
+        url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
+        
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
     os.system(f"nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
     return jsonify({"status": "ok", "url": url})
