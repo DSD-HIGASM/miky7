@@ -116,10 +116,10 @@
             <div>
                 <h1
                     class="font-extrabold text-xl tracking-tighter text-brand-600 dark:text-brand-500 flex items-center gap-2">
-                    <i class="ph-fill ph-target text-2xl"></i> MIKY 8
+                    <i class="ph-fill ph-target text-2xl"></i> MIKY 7
                 </h1>
                 <p class="text-[9px] text-slate-500 dark:text-zinc-500 font-mono uppercase tracking-[0.2em] mt-1">Mesh
-                    Client V14</p>
+                    Client V15</p>
             </div>
             <button onclick="toggleTheme()"
                 class="p-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:scale-110 transition-transform">
@@ -370,7 +370,7 @@
             <div id="term-output" class="flex-1 p-3 font-mono text-xs overflow-y-auto terminal-output text-zinc-300">
             </div>
             <div class="p-2.5 bg-black border-t border-zinc-800 flex items-center gap-2">
-                <span class="text-green-500 font-mono font-bold text-xs">higa@admin:~$</span>
+                <span class="text-green-500 font-mono font-bold text-xs">sysadmin@miky:~$</span>
                 <input type="text" id="term-input"
                     class="flex-1 bg-transparent text-white font-mono text-xs outline-none border-none"
                     autocomplete="off" onkeypress="handleTerminal(event)" />
@@ -542,8 +542,8 @@
     <script>
         // CONFIGURACIÓN DEL CLIENTE
         let clientConfig = { knownIps: [], masterPass: "" };
-        // BASE DE DATOS DEL CLUSTER
-        let db = { globalDefault: "https://llamador-shc.ms.gba.gov.ar", maintUrl: "local", sectors: ["General"], pcs: [], tgToken: "", tgChat: "", otaUrl: "" };
+        // BASE DE DATOS DEL CLUSTER (Limpia)
+        let db = { globalDefault: "", maintUrl: "local", sectors: ["General"], pcs: [], tgToken: "", tgChat: "", otaUrl: "" };
         let ui = { view: "grid", tab: "Todos", query: "", theme: "dark", isSyncing: false, activeNode: null };
         let clusterLeader = null;
         let offlineCounters = {};
@@ -649,7 +649,6 @@
                         return;
                     }
                 } catch (e) {
-                    // AUTO-LIMPIEZA: Si la IP da error (Porque clonaste o la apagaste), se borra de la memoria del navegador.
                     clientConfig.knownIps = clientConfig.knownIps.filter(x => x !== ip);
                     localStorage.setItem("miky_client_conf", JSON.stringify(clientConfig));
                 }
@@ -659,7 +658,6 @@
                 document.getElementById("sync-status").innerHTML = '<i class="ph-bold ph-warning text-red-500"></i> DESCONECTADO';
                 openSysModal('connectModal', 'connectPanel', 'connectBackdrop');
 
-                // Si el usuario puso una IP manual y falló:
                 if (ipsArray.length === 1 && document.getElementById('mesh-ip').value.trim() !== "") {
                     showToast("El equipo rechazó la conexión. ¿Está el agente corriendo?", "error");
                 }
@@ -676,7 +674,6 @@
                 return;
             }
 
-            // Bloquear botón para evitar ráfagas de clics que saturen el puerto
             const btn = document.getElementById('btn-mesh-connect');
             if (btn) {
                 btn.innerHTML = '<i class="ph-bold ph-spinner-gap spinner text-base"></i> CONECTANDO...';
@@ -684,7 +681,6 @@
                 btn.classList.add("opacity-70", "cursor-not-allowed");
             }
 
-            // Saneamiento por si el usuario pega con http:// o puerto
             ip = ip.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
             clientConfig.masterPass = pw;
             attemptConnection([ip]);
@@ -848,7 +844,7 @@
 
         async function globalAction(action) {
             if (action === 'global_url') {
-                if (await showConfirm("Lanzar URL Global", `¿Enviar la URL Global (${db.globalDefault}) a TODOS los equipos?`)) {
+                if (await showConfirm("Lanzar URL Global", `¿Enviar la URL Global a TODOS los equipos?`)) {
                     db.pcs.forEach(pc => sendCommand(pc.id, "startup", { url: db.globalDefault }, true));
                     showToast("URL Global disparada a la red.", "info");
                 }
@@ -952,7 +948,7 @@
             if (e.key === "Enter") {
                 const inp = document.getElementById("term-input"); const cmd = inp.value.trim().toLowerCase(); const out = document.getElementById("term-output");
                 if (!cmd) return;
-                out.innerHTML += `<p><span class="text-green-500 font-bold">higa@admin:~$</span> <span class="cmd">${cmd}</span></p>`; inp.value = "";
+                out.innerHTML += `<p><span class="text-green-500 font-bold">sysadmin@miky:~$</span> <span class="cmd">${cmd}</span></p>`; inp.value = "";
                 const valid = ["refresh", "clear_cache", "reboot", "vol_up", "vol_down", "sleep_screen", "wake_screen", "clear_cron"];
                 if (cmd === "clear") out.innerHTML = "";
                 else if (valid.includes(cmd)) { const ok = await sendCommand(ui.activeTermPc.id, cmd, {}, true); out.innerHTML += ok ? `<p class="ok">-> OK</p>` : `<p class="err">-> FALLÓ</p>`; }
