@@ -50,31 +50,27 @@ El sistema es ligero, pero el motor de renderizado de Chromium en pantallas de a
 Para instalar una nueva terminal desde cero, conecta un teclado a la Mini-PC, abre la terminal Linux y ejecuta este único comando:
 
 ```bash
-wget -qO instalar.sh "[https://raw.githubusercontent.com/DSD-HIGASM/miky7/refs/heads/main/install.sh](https://raw.githubusercontent.com/DSD-HIGASM/miky7/refs/heads/main/install.sh)" && bash instalar.sh
+wget -qO instalar.sh "https://raw.githubusercontent.com/DSD-HIGASM/miky7/refs/heads/main/install.sh" && bash instalar.sh
 ```
 
-El instalador realizará automáticamente:
+**El instalador realizará automáticamente:**
+1. Solicitud de Contraseña VNC, Token Maestro y Datos del Hospital.
+2. Instalación de todas las dependencias (Servidor SSH, Chromium, Python).
+3. Configuración del Firewall UFW (Puertos 22, 5900, 5000).
+4. Auto-generación e inyección del agente MIKY como demonio de sistema (`systemd`).
 
-Solicitud de Contraseña VNC, Token Maestro y Datos del Hospital.
+> ⚠️ **IMPORTANTE SOBRE EL AUDIO:** El instalador configura los motores de sonido (`PulseAudio` y `espeak`) de forma automática. Sin embargo, recuerda **conectar el cable HDMI en la salida principal (Puerto 1)** de la Mini-PC y asegurarte de que el volumen del televisor no esté silenciado.
 
-Instalación de todas las dependencias (Servidor SSH, Chromium, Python).
+---
 
-Configuración del Firewall UFW (Puertos 22, 5900, 5000).
+## 💻 Uso del Panel de Control
 
-Auto-generación e inyección del agente MIKY como demonio de sistema (systemd).
-
-⚠️ IMPORTANTE SOBRE EL AUDIO: El instalador configura los motores de sonido (PulseAudio y espeak) de forma automática. Sin embargo, recuerda conectar el cable HDMI en la salida principal (Puerto 1) de la Mini-PC y asegurarte de que el volumen del televisor no esté silenciado.
-
-💻 Uso del Panel de Control
 El panel de administración no requiere ser instalado, es un archivo portable.
 
-Abre el archivo miky7.html en cualquier navegador web.
-
-Ingresa la IP de cualquier terminal encendida en la red y tu Clave Maestra.
-
-Haz clic en el botón de Administración (⚙️).
-
-Ve a la pestaña Inventario & Agendas y usa el botón Auto-Descubrir Red para armar tu tablero en segundos.
+1. Abre el archivo `miky7.html` en cualquier navegador web.
+2. Ingresa la IP de cualquier terminal encendida en la red y tu **Clave Maestra**.
+3. Haz clic en el botón de **Administración** (⚙️).
+4. Ve a la pestaña **Inventario & Agendas** y usa el botón **Auto-Descubrir Red** para armar tu tablero en segundos.
 
 ### 🔄 Cómo hacer una Actualización OTA (Remota)
 Si publicas una nueva versión del código y necesitas actualizar todas las pantallas del hospital sin ir máquina por máquina:
@@ -83,21 +79,27 @@ Si publicas una nueva versión del código y necesitas actualizar todas las pant
    `https://raw.githubusercontent.com/DSD-HIGASM/miky7/refs/heads/main/agent.py`
 3. Haz clic en **DEPLOY**. Todas las terminales encendidas descargarán el nuevo código y se reiniciarán automáticamente en menos de 10 segundos.
 
-🛡️ Seguridad
-Protección API: Todos los endpoints rechazan peticiones sin el Bearer Token.
+---
 
-Sin Bases de Datos Expuestas: El clúster intercambia la estructura en memoria. El Panel lee y cifra la información en el navegador del administrador.
+## 🛡️ Seguridad
 
-Hardening de Interfaz: Modo Kiosko estricto (bloqueo de crash-bubbles, ocultamiento de cursor, bloqueo de traductor).
+* **Protección API:** Todos los endpoints rechazan peticiones sin el *Bearer Token*.
+* **Sin Bases de Datos Expuestas:** El clúster intercambia la estructura en memoria. El Panel lee y cifra la información en el navegador del administrador.
+* **Hardening de Interfaz:** Modo Kiosko estricto (bloqueo de crash-bubbles, ocultamiento de cursor, bloqueo de traductor).
 
-📩 Contacto y Soporte Institucional
-Este proyecto es impulsado para modernizar la infraestructura tecnológica de los efectores de salud pública.
+---
+
+## 📩 Contacto y Soporte Institucional
+
+Este proyecto es impulsado para modernizar la infraestructura tecnológica de los efectores de salud pública. 
 Para solicitar asistencia en la implementación en tu Hospital, resolver dudas técnicas o proponer mejoras, comunícate directamente con nuestro equipo:
 
-División de Salud Digital Hospital Interzonal General de Agudos (HIGA) "Gral. San Martín" - La Plata.
+**División de Salud Digital** *Hospital Interzonal General de Agudos (HIGA) "Gral. San Martín" - La Plata.*
+* 📧 Email: **[clamas@ms.gba.gov.ar](mailto:clamas@ms.gba.gov.ar)**
 
-📧 Email: clamas@ms.gba.gov.ar
+---
 
-📄 Licencia
-Este proyecto está bajo la Licencia Apache 2.0.
+## 📄 Licencia
+
+Este proyecto está bajo la Licencia **Apache 2.0**.
 Puedes usarlo y distribuirlo libremente manteniendo los avisos de atribución a la División de Salud Digital del HIGA San Martín.
