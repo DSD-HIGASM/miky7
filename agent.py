@@ -17,7 +17,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # =================================================================
 def setup_mantenimiento_ui():
     html_path = os.path.expanduser("~/control_remoto/mantenimiento.html")
-    # HTML ajustado para el motor de escalado de Chromium en Kiosko (TVs)
     html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -52,7 +51,7 @@ def setup_mantenimiento_ui():
         }
         
         .pba-gradient-bar {
-            height: 16px;
+            height: 22px;
             width: 100%;
             background: linear-gradient(90deg, var(--pba-pink) 0%, var(--pba-blue) 50%, var(--pba-cyan) 100%);
             flex-shrink: 0;
@@ -273,7 +272,7 @@ def watchdog_hsi():
         if "mantenimiento.html" in target_url or not target_url.startswith("http"): continue
         current_status_down = False
         try:
-            req = urllib.request.Request(target_url, headers={'User-Agent': 'Miki/Failover'})
+            req = urllib.request.Request(target_url, headers={'User-Agent': 'Miky/Failover'})
             with urllib.request.urlopen(req, timeout=7) as response:
                 if response.status >= 500: current_status_down = True
         except HTTPError as e:
