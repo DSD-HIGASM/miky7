@@ -5,10 +5,15 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from config import BACKEND_TOKEN
 
+try:
+    from config import HOSPITAL_NAME
+except ImportError:
+    HOSPITAL_NAME = "Establecimiento de Salud"
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # =================================================================
-# INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO
+# INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO INSTITUCIONAL
 # =================================================================
 def setup_mantenimiento_ui():
     html_path = os.path.expanduser("~/control_remoto/mantenimiento.html")
@@ -17,51 +22,201 @@ def setup_mantenimiento_ui():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Interrumpido</title>
+    <title>Atención en Curso - {HOSPITAL_NAME}</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+
     <style>
-        :root { --pba-pink: #e81f76; --pba-blue: #417099; --pba-cyan: #00aec3; --bg: #f8fafc; --text: #0f172a; }
-        body, html { background-color: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; overflow: hidden; }
-        .pba-gradient-bar { position: absolute; top: 0; left: 0; width: 100%; height: 16px; background: linear-gradient(90deg, var(--pba-pink) 0%, var(--pba-blue) 50%, var(--pba-cyan) 100%); }
-        .card { background: #ffffff; border: 1px solid rgba(0,0,0,0.05); border-radius: 2rem; padding: 5rem; max-width: 85%; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.08); display: flex; flex-direction: column; align-items: center; }
-        .logos-container { display: flex; align-items: center; gap: 40px; margin-bottom: 40px; }
-        .logo-higa { height: 120px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
-        .icon-alert { width: 100px; height: 100px; color: var(--pba-cyan); animation: pulse 2.5s infinite ease-in-out; }
-        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } }
-        h1 { font-weight: 900; font-size: 5rem; color: #1e293b; margin: 0 0 20px 0; text-transform: uppercase; letter-spacing: -1px; }
-        p.instruccion { font-size: 3rem; font-weight: 600; color: #475569; margin: 0; line-height: 1.3; }
-        .highlight { color: var(--pba-blue); font-weight: 800; }
-        .footer { position: absolute; bottom: 0; left: 0; width: 100%; padding: 2.5rem 0; background: #ffffff; border-top: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-around; align-items: center; box-shadow: 0 -10px 20px rgba(0,0,0,0.02); }
-        .footer-text { display: flex; flex-direction: column; text-align: left; }
-        .footer-text strong { font-size: 1.8rem; color: var(--pba-blue); font-weight: 800; }
-        .footer-text span { font-size: 1.2rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-        .spinner-container { display: flex; align-items: center; gap: 15px; background: rgba(65,112,153,0.05); padding: 1rem 2rem; border-radius: 50px; border: 1px solid rgba(65,112,153,0.15); }
-        .spinner { width: 24px; height: 24px; border: 3px solid rgba(65,112,153,0.2); border-top-color: var(--pba-blue); border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .spinner-text { font-size: 1.2rem; font-weight: 700; color: var(--pba-blue); }
+        :root {
+            --pba-pink: #e81f76;
+            --pba-blue: #417099;
+            --pba-cyan: #00aec3;
+            --bg-main: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+        }
+        
+        * { box-sizing: border-box; }
+        
+        body, html {
+            margin: 0; padding: 0; 
+            height: 100vh; width: 100vw;
+            background-color: var(--bg-main);
+            font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+            overflow: hidden; 
+            display: flex; flex-direction: column;
+        }
+        
+        .pba-gradient-bar {
+            height: 22px;
+            width: 100%;
+            background: linear-gradient(90deg, var(--pba-pink) 0%, var(--pba-blue) 50%, var(--pba-cyan) 100%);
+            flex-shrink: 0;
+        }
+
+        .content-wrapper {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 3rem 4rem;
+        }
+
+        .glass-card {
+            background: var(--card-bg);
+            border-radius: 2.5rem;
+            padding: 6rem 8rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0,0,0,0.02);
+            text-align: center;
+            max-width: 85vw;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        .icon-container {
+            background-color: rgba(232, 31, 118, 0.08); 
+            border-radius: 50%;
+            padding: 2.5rem;
+            margin-bottom: 2.5rem;
+            animation: pulse-soft 3s ease-in-out infinite;
+        }
+
+        .warning-icon {
+            width: 100px; height: 100px; 
+            color: var(--pba-pink);
+        }
+
+        h1 {
+            font-size: 5.2rem; font-weight: 900;
+            color: var(--text-main);
+            margin: 0 0 1.5rem 0;
+            text-transform: uppercase; 
+            letter-spacing: -1px; line-height: 1.1;
+        }
+
+        .subtitle {
+            font-size: 3.2rem; font-weight: 400;
+            color: var(--text-muted);
+            margin: 0 0 4.5rem 0;
+            line-height: 1.3;
+        }
+
+        .instruction-box {
+            background: rgba(65, 112, 153, 0.06); 
+            border: 2px solid rgba(65, 112, 153, 0.15);
+            border-left: 14px solid var(--pba-blue);
+            padding: 4rem 5.5rem;
+            border-radius: 1rem 2rem 2rem 1rem;
+            display: inline-block;
+        }
+
+        .instruction-box p {
+            font-size: 3.8rem; font-weight: 500;
+            color: var(--text-main);
+            margin: 0; line-height: 1.35;
+        }
+
+        .highlight { 
+            color: var(--pba-blue); 
+            font-weight: 900; 
+        }
+
+        .footer-bar {
+            background-color: var(--card-bg);
+            padding: 0 5rem;
+            height: 160px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-top: 1px solid rgba(0,0,0,0.08);
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.03);
+            flex-shrink: 0;
+        }
+
+        .footer-logos {
+            display: flex; align-items: center; gap: 3rem;
+            height: 100%;
+        }
+
+        .logo-separator {
+            height: 65px;
+            width: 2px;
+            background-color: #cbd5e1;
+            border-radius: 2px;
+        }
+
+        .logo-provincia {
+            height: 85px; width: auto;
+            object-fit: contain;
+            mix-blend-mode: multiply;
+        }
+
+        .logo-hospital {
+            height: 90px; width: auto;
+            object-fit: contain;
+            mix-blend-mode: multiply;
+        }
+
+        .reconnect-status {
+            display: flex; align-items: center; gap: 1.5rem;
+            background: var(--bg-main);
+            padding: 1.8rem 3.5rem; border-radius: 100px;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .spinner {
+            width: 32px; height: 32px;
+            border: 5px solid rgba(0, 174, 195, 0.2);
+            border-top-color: var(--pba-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .reconnect-status span {
+            font-size: 1.6rem; font-weight: 700; color: var(--pba-cyan); text-transform: uppercase; letter-spacing: 1.5px;
+        }
+
+        @keyframes pulse-soft {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(232, 31, 118, 0.2); }
+            50% { transform: scale(1.02); box-shadow: 0 0 0 20px rgba(232, 31, 118, 0); }
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div class="pba-gradient-bar"></div>
-    <div class="card">
-        <div class="logos-container">
-            <svg class="icon-alert" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-            <img src="logo_higa.jpg" alt="HIGA Gral San Martín" class="logo-higa" onerror="this.style.display='none'">
+    
+    <main class="content-wrapper">
+        <div class="glass-card">
+            <div class="icon-container">
+                <svg class="warning-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            </div>
+            <h1>Pantalla en Mantenimiento</h1>
+            <p class="subtitle">La atención de pacientes continúa desarrollándose con normalidad.</p>
+            
+            <div class="instruction-box">
+                <p>Aguarde en la sala de espera.<br>Será llamado <span class="highlight">a viva voz por su nombre.</span></p>
+            </div>
         </div>
-        <h1>Sistema temporalmente interrumpido</h1>
-        <p class="instruccion">Esté atento al <span class="highlight">llamado a viva voz</span> e indicaciones<br>del personal para su atención</p>
-    </div>
-    <div class="footer">
-        <div class="footer-text">
-            <strong>HIGA Gral. San Martín</strong>
-            <span>Ministerio de Salud | Provincia de Buenos Aires</span>
+    </main>
+
+    <footer class="footer-bar">
+        <div class="footer-logos">
+            <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
+            <div class="logo-separator"></div>
+            <img src="logo_hospital.jpg" alt="{HOSPITAL_NAME}" class="logo-hospital">
         </div>
-        <div class="spinner-container">
+        <div class="reconnect-status">
             <div class="spinner"></div>
-            <span class="spinner-text">Reconectando con HSI...</span>
+            <span>Restableciendo sistema visual...</span>
         </div>
-    </div>
+    </footer>
 </body>
 </html>"""
+
+    # Inyección de variable python dentro del string de forma segura
+    html_content = html_content.replace("{HOSPITAL_NAME}", HOSPITAL_NAME)
+
     os.makedirs(os.path.dirname(html_path), exist_ok=True)
     with open(html_path, "w", encoding="utf-8") as f: 
         f.write(html_content)
@@ -164,7 +319,6 @@ def mesh_network_engine():
         my_ip = get_local_ip()
         alive_ips = [my_ip]
         
-        # 1. Ping general para conocer el estado real de la red
         for pc in pcs:
             ip = pc.get("ip")
             if not ip or ip == my_ip: continue
@@ -174,14 +328,12 @@ def mesh_network_engine():
                     if response.status == 200: alive_ips.append(ip)
             except: pass
 
-        # 2. Elección Estricta del Líder (Antes de evaluar caídas)
         try:
             sorted_ips = sorted(alive_ips, key=lambda x: [int(p) for p in x.split('.')])
             current_leader = sorted_ips[0]
         except:
             current_leader = my_ip
 
-        # 3. Procesar estados y Enviar Telegram (Solo si soy el Líder actual)
         for pc in pcs:
             ip = pc.get("ip")
             if not ip or ip == my_ip: continue
