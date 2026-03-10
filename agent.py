@@ -20,8 +20,20 @@ kiosk_lock = True
 # =================================================================
 # INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO INSTITUCIONAL
 # =================================================================
-def setup_mantenimiento_ui():
-    html_path = os.path.expanduser("~/control_remoto/mantenimiento.html")
+def get_existing_logo_name():
+    t_dir = os.path.expanduser('~/control_remoto')
+    for ext in ['png', 'jpg', 'jpeg', 'svg', 'gif', 'webp']:
+        if os.path.exists(os.path.join(t_dir, f"logo_hospital.{ext}")):
+            return f"logo_hospital.{ext}"
+    return "logo_hospital.jpg"
+
+def setup_mantenimiento_ui(custom_logo=None):
+    t_dir = os.path.expanduser("~/control_remoto")
+    os.makedirs(t_dir, exist_ok=True)
+    
+    logo_file = custom_logo if custom_logo else get_existing_logo_name()
+    html_path = os.path.join(t_dir, "mantenimiento.html")
+    
     html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -210,7 +222,7 @@ def setup_mantenimiento_ui():
         <div class="footer-logos">
             <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
             <div class="logo-separator"></div>
-            <img src="logo_hospital.jpg" alt="{HOSPITAL_NAME}" class="logo-hospital">
+            <img src="{LOGO_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital">
         </div>
         <div class="reconnect-status">
             <div class="spinner"></div>
@@ -221,8 +233,8 @@ def setup_mantenimiento_ui():
 </html>"""
 
     html_content = html_content.replace("{HOSPITAL_NAME}", HOSPITAL_NAME)
+    html_content = html_content.replace("{LOGO_HOSP}", logo_file)
 
-    os.makedirs(os.path.dirname(html_path), exist_ok=True)
     with open(html_path, "w", encoding="utf-8") as f: 
         f.write(html_content)
 
@@ -244,7 +256,6 @@ def load_db():
         try:
             with open(DB_FILE, 'r') as f: 
                 data = json.load(f)
-                # Blindaje si la url quedó vacía por un guardado anterior
                 if not data.get("maintUrl"):
                     data["maintUrl"] = "local"
                 return data
@@ -454,13 +465,11 @@ def set_startup():
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     url = request.json.get('url')
     
-    # BLINDAJE: Si la URL viene vacía, fuerza la local para que Chromium no abra una Nueva Pestaña
     if not url or str(url).strip() == "" or url == "local":
         url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
         
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
     
-    # CIERRE SEGURO: Mata cualquier proceso de chromium activo antes de relanzar
     os.system(f"export DISPLAY=:0 && killall chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
     
     return jsonify({"status": "ok", "url": url})
@@ -482,7 +491,8 @@ def control():
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
             
-            cmd = f"sleep 2 && wget --no-check-certificate -qO /tmp/new_agent.py \"{repo_url}\" && mv /tmp/new_agent.py {install_path}/agent.py && wget --no-check-certificate -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg \"{min_url}\" && sudo reboot"
+            # Se usa curl para evadir los fallos de cifrado que a veces tiene wget con URLs raw de github
+            cmd = f"sleep 2 && curl -L -k -s -o /tmp/new_agent.py \"{repo_url}\" && mv /tmp/new_agent.py {install_path}/agent.py && curl -L -k -s -o {os.path.expanduser('~/control_remoto')}/ministerio.svg \"{min_url}\" && sudo reboot"
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
         return jsonify({"error": "Falta URL"}), 400
@@ -495,17 +505,34 @@ def control():
                 t_dir = os.path.expanduser('~/control_remoto')
                 os.makedirs(t_dir, exist_ok=True)
                 
-                # BLINDAJE DE DESCARGA: Wget disfrazado de navegador real para evitar el error 403 Forbidden
-                cmd1 = f"wget --no-check-certificate -U 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -qO {t_dir}/logo_hospital.jpg \"{url_hosp}\""
-                cmd2 = f"wget --no-check-certificate -U 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -qO {t_dir}/ministerio.svg \"{url_min}\""
+                tmp_hosp = "/tmp/hosp_logo"
+                tmp_min = "/tmp/min_logo"
                 
-                subprocess.run(cmd1, shell=True)
-                subprocess.run(cmd2, shell=True)
+                # Usar curl disfrazado de navegador real siguiendo redirecciones para vencer los bloqueos 403
+                subprocess.run(f"curl -L -k -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -o {tmp_hosp} \"{url_hosp}\"", shell=True)
+                subprocess.run(f"curl -L -k -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -o {tmp_min} \"{url_min}\"", shell=True)
                 
+                # Detección Inteligente NATIVA: Verificamos los bytes del archivo para saber si es PNG, JPG o SVG
+                ext = "jpg"
+                try:
+                    mime = subprocess.check_output(f"file -b --mime-type {tmp_hosp}", shell=True).decode().strip()
+                    if "png" in mime: ext = "png"
+                    elif "svg" in mime: ext = "svg"
+                    elif "gif" in mime: ext = "gif"
+                    elif "webp" in mime: ext = "webp"
+                except: pass
+                
+                # Mover archivos limpiando versiones anteriores
+                os.system(f"rm -f {t_dir}/logo_hospital.*")
+                os.system(f"mv {tmp_hosp} {t_dir}/logo_hospital.{ext}")
+                os.system(f"mv {tmp_min} {t_dir}/ministerio.svg")
+                
+                # Regenerar HTML y forzar F5
+                setup_mantenimiento_ui(custom_logo=f"logo_hospital.{ext}")
                 run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
 
             threading.Thread(target=download_logos).start()
-            return jsonify({"status": "ok", "msg": "Logos descargando..."})
+            return jsonify({"status": "ok", "msg": "Logos descargando y procesando..."})
         return jsonify({"error": "Faltan URLs"}), 400
         
     elif acc == 'wol':
