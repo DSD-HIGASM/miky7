@@ -21,14 +21,7 @@ kiosk_lock = True
 # INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO INSTITUCIONAL
 # =================================================================
 def setup_mantenimiento_ui():
-    t_dir = os.path.expanduser("~/control_remoto")
-    os.makedirs(t_dir, exist_ok=True)
-    html_path = os.path.join(t_dir, "mantenimiento.html")
-    
-    # Rutas absolutas para evitar bloqueos de Chromium Kiosko
-    path_prov = f"file://{t_dir}/ministerio.svg"
-    path_hosp = f"file://{t_dir}/logo_hospital.jpg"
-    
+    html_path = os.path.expanduser("~/control_remoto/mantenimiento.html")
     html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -215,9 +208,9 @@ def setup_mantenimiento_ui():
 
     <footer class="footer-bar">
         <div class="footer-logos">
-            <img src="{PATH_PROV}" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
+            <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
             <div class="logo-separator"></div>
-            <img src="{PATH_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital" onerror="this.style.display='none'; document.querySelector('.logo-separator').style.display='none';">
+            <img src="logo_hospital.jpg" alt="{HOSPITAL_NAME}" class="logo-hospital">
         </div>
         <div class="reconnect-status">
             <div class="spinner"></div>
@@ -228,9 +221,8 @@ def setup_mantenimiento_ui():
 </html>"""
 
     html_content = html_content.replace("{HOSPITAL_NAME}", HOSPITAL_NAME)
-    html_content = html_content.replace("{PATH_PROV}", path_prov)
-    html_content = html_content.replace("{PATH_HOSP}", path_hosp)
 
+    os.makedirs(os.path.dirname(html_path), exist_ok=True)
     with open(html_path, "w", encoding="utf-8") as f: 
         f.write(html_content)
 
@@ -302,7 +294,7 @@ def watchdog_hsi():
             subprocess.Popen(cmd, shell=True)
         elif not current_status_down and hsi_is_down:
             hsi_is_down = False
-            subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+            subprocess.Popen(f"export DISPLAY=:0 && pkill chromium && sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
 
 def watchdog_browser():
     global kiosk_lock
@@ -461,9 +453,8 @@ def set_startup():
         
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
     
-    # REINICIO DURO: Matamos chromium y lo volvemos a abrir en lugar de solo llamar a bash
-    cmd = f"export DISPLAY=:0 && pkill chromium && sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {url} > /dev/null 2>&1 &"
-    subprocess.Popen(cmd, shell=True)
+    # CORRECCIÓN DE "NUEVA PESTAÑA": Matar a Chromium antes de lanzarlo para que arranque limpio
+    os.system(f"export DISPLAY=:0 && pkill chromium && sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
     
     return jsonify({"status": "ok", "url": url})
 
@@ -483,21 +474,45 @@ def control():
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
-            cmd = f"sleep 2 && wget --no-check-certificate -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && wget --no-check-certificate -4 -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg {min_url} && sudo reboot"
+            
+            # CORRECCIÓN WGET: Usamos --no-check-certificate para que GitHub y otras URLs HTTPS no rechacen la conexión
+            cmd = f"sleep 2 && wget --no-check-certificate -qO /tmp/new_agent.py \"{repo_url}\" && mv /tmp/new_agent.py {install_path}/agent.py && wget --no-check-certificate -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg \"{min_url}\" && sudo reboot"
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
         return jsonify({"error": "Falta URL"}), 400
+    
     elif acc == 'update_logos':
         url_hosp = request.json.get('url_hospital')
         url_min = request.json.get('url_ministerio')
         if url_hosp and url_min:
-            t_dir = os.path.expanduser('~/control_remoto')
-            os.makedirs(t_dir, exist_ok=True)
-            # Agregamos --no-check-certificate y -T 10 para evitar fallos de proxy hospitalario
-            cmd = f"wget --no-check-certificate -T 10 -4 -qO {t_dir}/logo_hospital.jpg \"{url_hosp}\" && wget --no-check-certificate -T 10 -4 -qO {t_dir}/ministerio.svg \"{url_min}\" && export DISPLAY=:0 && xdotool search --onlyvisible --class 'chromium' windowactivate key F5"
-            subprocess.Popen(cmd, shell=True)
-            return jsonify({"status": "ok", "msg": "Logos actualizados"})
+            # CORRECCIÓN DE DESCARGA DE LOGOS: Usamos el motor nativo de Python para que nunca falle por certificados o permisos
+            def download_logos():
+                t_dir = os.path.expanduser('~/control_remoto')
+                os.makedirs(t_dir, exist_ok=True)
+                import ssl
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                
+                try:
+                    req_h = urllib.request.Request(url_hosp, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req_h, context=ctx, timeout=15) as r, open(f"{t_dir}/logo_hospital.jpg", 'wb') as f:
+                        f.write(r.read())
+                except Exception as e: logging.error(f"Error descargando logo hospital: {e}")
+                
+                try:
+                    req_m = urllib.request.Request(url_min, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req_m, context=ctx, timeout=15) as r, open(f"{t_dir}/ministerio.svg", 'wb') as f:
+                        f.write(r.read())
+                except Exception as e: logging.error(f"Error descargando SVG ministerio: {e}")
+                
+                # Forzamos recarga de pantalla (F5) para que Chromium olvide la caché y muestre los nuevos logos
+                run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+
+            threading.Thread(target=download_logos).start()
+            return jsonify({"status": "ok", "msg": "Logos descargando..."})
         return jsonify({"error": "Faltan URLs"}), 400
+        
     elif acc == 'wol':
         target_mac = request.json.get('mac')
         if target_mac: send_wol(target_mac)
