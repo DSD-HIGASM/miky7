@@ -22,11 +22,10 @@ kiosk_lock = True
 # =================================================================
 def get_existing_logo_name():
     t_dir = os.path.expanduser('~/control_remoto')
-    # Busca dinámicamente qué formato existe en la máquina
     for ext in ['png', 'jpg', 'jpeg', 'svg', 'gif', 'webp']:
         if os.path.exists(os.path.join(t_dir, f"logo_hospital.{ext}")):
             return f"logo_hospital.{ext}"
-    return "logo_hospital.png" # Fallback inicial
+    return "logo_hospital.jpg"
 
 def setup_mantenimiento_ui(custom_logo=None):
     t_dir = os.path.expanduser("~/control_remoto")
@@ -492,7 +491,8 @@ def control():
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
             
-            cmd = f"sleep 2 && wget --no-check-certificate -qO /tmp/new_agent.py '{repo_url}' && mv /tmp/new_agent.py {install_path}/agent.py && wget --no-check-certificate -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg '{min_url}' && sudo reboot"
+            # IGUAL QUE EL INSTALL.SH: IPv4 forzado y comillas dobles
+            cmd = f'sleep 2 && wget -4 -qO /tmp/new_agent.py "{repo_url}" && mv /tmp/new_agent.py {install_path}/agent.py && wget -4 -qO {os.path.expanduser("~/control_remoto")}/ministerio.svg "{min_url}" && sudo reboot'
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
         return jsonify({"error": "Falta URL"}), 400
@@ -505,23 +505,25 @@ def control():
                 t_dir = os.path.expanduser('~/control_remoto')
                 os.makedirs(t_dir, exist_ok=True)
                 
-                # EXTRACTOR DE FORMATO (Asume PNG por defecto si la URL no dice nada, ideal para logos)
-                ext = "png"
+                # Sigue detectando el formato dinámicamente de la URL
+                ext = "jpg"
                 u_lower = url_hosp.lower()
-                if ".jpg" in u_lower or ".jpeg" in u_lower: ext = "jpg"
+                if ".png" in u_lower: ext = "png"
                 elif ".svg" in u_lower: ext = "svg"
                 elif ".gif" in u_lower: ext = "gif"
                 elif ".webp" in u_lower: ext = "webp"
+                elif ".jpeg" in u_lower: ext = "jpeg"
                 
                 logo_name = f"logo_hospital.{ext}"
                 
-                # Limpia los viejos y descarga con WGET RAW y comillas simples
+                # Limpia los viejos
                 os.system(f"rm -f {t_dir}/logo_hospital.*")
                 
-                subprocess.run(f"wget --no-check-certificate -qO {t_dir}/{logo_name} '{url_hosp}'", shell=True)
-                subprocess.run(f"wget --no-check-certificate -qO {t_dir}/ministerio.svg '{url_min}'", shell=True)
+                # EXACTAMENTE LA MISMA SINTAXIS DEL INSTALL.SH (-4 y comillas dobles)
+                subprocess.run(f'wget -4 -qO {t_dir}/{logo_name} "{url_hosp}"', shell=True)
+                subprocess.run(f'wget -4 -qO {t_dir}/ministerio.svg "{url_min}"', shell=True)
                 
-                # Reconstruye el HTML y le pega un F5 al Chromium
+                # Reconstruye el HTML con el nombre exacto y F5
                 setup_mantenimiento_ui(custom_logo=logo_name)
                 run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
 
