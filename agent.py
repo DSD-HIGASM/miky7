@@ -464,6 +464,7 @@ def post_sync():
 
 @app.route('/status', methods=['GET'])
 def status():
+    global kiosk_lock
     try: cpu = psutil.cpu_percent(interval=0.1)
     except: cpu = 0
     try: 
@@ -476,7 +477,7 @@ def status():
         match = re.search(r"(\d+)%", output)
         if match: vol = match.group(1)
     except: vol = "Err"
-    return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac(), "leader": current_leader})
+    return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac(), "leader": current_leader, "kiosk_lock": kiosk_lock})
 
 @app.route('/set_startup', methods=['POST'])
 def set_startup():
@@ -492,11 +493,15 @@ def set_startup():
 
 @app.route('/control', methods=['POST'])
 def control():
+    global kiosk_lock
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     acc = request.json.get('accion')
     if acc == 'refresh': run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
     elif acc == 'clear_cache': run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
     elif acc == 'reboot': os.system("sudo reboot")
+    elif acc == 'toggle_kiosk': # NUEVO COMANDO PARA EL CANDADO
+        kiosk_lock = request.json.get('state', True)
+        return jsonify({"status": "ok", "kiosk_lock": kiosk_lock})
     elif acc == 'update_agent':
         repo_url = request.json.get('url')
         if repo_url:
