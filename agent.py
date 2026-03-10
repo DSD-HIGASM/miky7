@@ -13,6 +13,11 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # =================================================================
+# VARIABLES DE ESTADO LOCAL
+# =================================================================
+kiosk_lock = True
+
+# =================================================================
 # INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO INSTITUCIONAL
 # =================================================================
 def setup_mantenimiento_ui():
@@ -226,66 +231,6 @@ try:
 except Exception as e:
     logging.error(f"Fallo inicial: {e}")
 
-
-# =================================================================
-# VARIABLES DE ESTADO LOCAL
-# =================================================================
-kiosk_lock = True # True = Kiosko Inmortal / False = Modo Mantenimiento Manual
-
-# =================================================================
-# WATCHDOG DE RED (Failover HSI) Y DE PROCESO (Navegador Inmortal)
-# =================================================================
-hsi_is_down = False
-
-def watchdog_hsi():
-    global hsi_is_down, kiosk_lock
-    maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
-    sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
-    
-    while True:
-        time.sleep(15) 
-        if not kiosk_lock: continue # Si el candado está abierto, pausamos el guardián
-        
-        try:
-            with open(STARTUP_URL_FILE, 'r') as f: target_url = f.read().strip()
-        except: continue
-            
-        if "mantenimiento.html" in target_url or not target_url.startswith("http"): continue
-        current_status_down = False
-        try:
-            req = urllib.request.Request(target_url, headers={'User-Agent': 'Miky/Failover'})
-            with urllib.request.urlopen(req, timeout=7) as response:
-                if response.status >= 500: current_status_down = True
-        except HTTPError as e:
-            if e.code >= 500: current_status_down = True
-        except URLError: current_status_down = True
-        except Exception: current_status_down = True
-
-        if current_status_down and not hsi_is_down:
-            hsi_is_down = True
-            cmd = f"export DISPLAY=:0 && pkill chromium && sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
-            subprocess.Popen(cmd, shell=True)
-        elif not current_status_down and hsi_is_down:
-            hsi_is_down = False
-            subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
-
-def watchdog_browser():
-    global kiosk_lock
-    while True:
-        time.sleep(10)
-        if not kiosk_lock: continue # Si el candado está abierto, permitimos que se cierre
-        
-        try:
-            browser_alive = any("chromium" in p.name().lower() for p in psutil.process_iter(['name']))
-            if not browser_alive:
-                sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
-                subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
-        except: pass
-
-threading.Thread(target=watchdog_hsi, daemon=True).start()
-threading.Thread(target=watchdog_browser, daemon=True).start()
-
-
 # =================================================================
 # BASE DE DATOS Y RED
 # =================================================================
@@ -315,16 +260,19 @@ def get_local_ip():
     return ip
 
 # =================================================================
-# WATCHDOG FAILOVER
+# WATCHDOG DE RED (Failover HSI) Y DE PROCESO
 # =================================================================
 hsi_is_down = False
+
 def watchdog_hsi():
-    global hsi_is_down
+    global hsi_is_down, kiosk_lock
     maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
     sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
     
     while True:
         time.sleep(15) 
+        if not kiosk_lock: continue
+        
         try:
             with open(STARTUP_URL_FILE, 'r') as f: target_url = f.read().strip()
         except: continue
@@ -348,7 +296,21 @@ def watchdog_hsi():
             hsi_is_down = False
             subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
 
+def watchdog_browser():
+    global kiosk_lock
+    while True:
+        time.sleep(10)
+        if not kiosk_lock: continue 
+        
+        try:
+            browser_alive = any("chromium" in p.name().lower() for p in psutil.process_iter(['name']))
+            if not browser_alive:
+                sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
+                subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+        except: pass
+
 threading.Thread(target=watchdog_hsi, daemon=True).start()
+threading.Thread(target=watchdog_browser, daemon=True).start()
 
 # =================================================================
 # CLÚSTER MESH: V3.1 - Liderazgo Estricto
@@ -508,10 +470,21 @@ def control():
         repo_url = request.json.get('url')
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
-            cmd = f"sleep 2 && wget -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && sudo reboot"
+            min_url = repo_url.replace("agent.py", "ministerio.svg")
+            cmd = f"sleep 2 && wget -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && wget -4 -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg {min_url} && sudo reboot"
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
         return jsonify({"error": "Falta URL"}), 400
+    elif acc == 'update_logos':
+        url_hosp = request.json.get('url_hospital')
+        url_min = request.json.get('url_ministerio')
+        if url_hosp and url_min:
+            t_dir = os.path.expanduser('~/control_remoto')
+            os.makedirs(t_dir, exist_ok=True)
+            cmd = f"wget -4 -qO {t_dir}/logo_hospital.jpg \"{url_hosp}\" && wget -4 -qO {t_dir}/ministerio.svg \"{url_min}\""
+            subprocess.Popen(cmd, shell=True)
+            return jsonify({"status": "ok", "msg": "Logos actualizados"})
+        return jsonify({"error": "Faltan URLs"}), 400
     elif acc == 'wol':
         target_mac = request.json.get('mac')
         if target_mac: send_wol(target_mac)
