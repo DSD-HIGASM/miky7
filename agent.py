@@ -307,11 +307,11 @@ def watchdog_hsi():
 
         if current_status_down and not hsi_is_down:
             hsi_is_down = True
-            cmd = f"export DISPLAY=:0 && killall chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
+            cmd = f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
             subprocess.Popen(cmd, shell=True)
         elif not current_status_down and hsi_is_down:
             hsi_is_down = False
-            subprocess.Popen(f"export DISPLAY=:0 && killall chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+            subprocess.Popen(f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
 
 def watchdog_browser():
     global kiosk_lock
@@ -470,7 +470,8 @@ def set_startup():
         
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
     
-    os.system(f"export DISPLAY=:0 && killall chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
+    # MATANZA DEFINITIVA: Cierra todo rastro de Chromium con killall -9 antes de iniciar
+    os.system(f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
     
     return jsonify({"status": "ok", "url": url})
 
@@ -491,8 +492,7 @@ def control():
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
             
-            # Se usa curl para evadir los fallos de cifrado que a veces tiene wget con URLs raw de github
-            cmd = f"sleep 2 && curl -L -k -s -o /tmp/new_agent.py \"{repo_url}\" && mv /tmp/new_agent.py {install_path}/agent.py && curl -L -k -s -o {os.path.expanduser('~/control_remoto')}/ministerio.svg \"{min_url}\" && sudo reboot"
+            cmd = f"sleep 2 && wget -qO /tmp/new_agent.py \"{repo_url}\" && mv /tmp/new_agent.py {install_path}/agent.py && wget -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg \"{min_url}\" && sudo reboot"
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
         return jsonify({"error": "Falta URL"}), 400
@@ -505,30 +505,26 @@ def control():
                 t_dir = os.path.expanduser('~/control_remoto')
                 os.makedirs(t_dir, exist_ok=True)
                 
-                tmp_hosp = "/tmp/hosp_logo"
-                tmp_min = "/tmp/min_logo"
-                
-                # Usar curl disfrazado de navegador real siguiendo redirecciones para vencer los bloqueos 403
-                subprocess.run(f"curl -L -k -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -o {tmp_hosp} \"{url_hosp}\"", shell=True)
-                subprocess.run(f"curl -L -k -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -o {tmp_min} \"{url_min}\"", shell=True)
-                
-                # Detección Inteligente NATIVA: Verificamos los bytes del archivo para saber si es PNG, JPG o SVG
+                # EXTRACTOR NATIVO DE EXTENSIONES (Para que soporte png, jpg, jpeg, svg, webp)
                 ext = "jpg"
-                try:
-                    mime = subprocess.check_output(f"file -b --mime-type {tmp_hosp}", shell=True).decode().strip()
-                    if "png" in mime: ext = "png"
-                    elif "svg" in mime: ext = "svg"
-                    elif "gif" in mime: ext = "gif"
-                    elif "webp" in mime: ext = "webp"
-                except: pass
+                u_lower = url_hosp.lower()
+                if ".png" in u_lower: ext = "png"
+                elif ".svg" in u_lower: ext = "svg"
+                elif ".gif" in u_lower: ext = "gif"
+                elif ".webp" in u_lower: ext = "webp"
+                elif ".jpeg" in u_lower: ext = "jpeg"
                 
-                # Mover archivos limpiando versiones anteriores
+                logo_name = f"logo_hospital.{ext}"
+                
+                # Borra logos viejos para evitar conflictos
                 os.system(f"rm -f {t_dir}/logo_hospital.*")
-                os.system(f"mv {tmp_hosp} {t_dir}/logo_hospital.{ext}")
-                os.system(f"mv {tmp_min} {t_dir}/ministerio.svg")
                 
-                # Regenerar HTML y forzar F5
-                setup_mantenimiento_ui(custom_logo=f"logo_hospital.{ext}")
+                # WGET LIMPIO (Mismo método que el install.sh)
+                subprocess.run(f"wget -qO {t_dir}/{logo_name} \"{url_hosp}\"", shell=True)
+                subprocess.run(f"wget -qO {t_dir}/ministerio.svg \"{url_min}\"", shell=True)
+                
+                # Reconstruye el HTML con el nombre exacto de la extensión y actualiza
+                setup_mantenimiento_ui(custom_logo=logo_name)
                 run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
 
             threading.Thread(target=download_logos).start()
