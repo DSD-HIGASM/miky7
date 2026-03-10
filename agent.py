@@ -226,6 +226,66 @@ try:
 except Exception as e:
     logging.error(f"Fallo inicial: {e}")
 
+
+# =================================================================
+# VARIABLES DE ESTADO LOCAL
+# =================================================================
+kiosk_lock = True # True = Kiosko Inmortal / False = Modo Mantenimiento Manual
+
+# =================================================================
+# WATCHDOG DE RED (Failover HSI) Y DE PROCESO (Navegador Inmortal)
+# =================================================================
+hsi_is_down = False
+
+def watchdog_hsi():
+    global hsi_is_down, kiosk_lock
+    maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
+    sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
+    
+    while True:
+        time.sleep(15) 
+        if not kiosk_lock: continue # Si el candado está abierto, pausamos el guardián
+        
+        try:
+            with open(STARTUP_URL_FILE, 'r') as f: target_url = f.read().strip()
+        except: continue
+            
+        if "mantenimiento.html" in target_url or not target_url.startswith("http"): continue
+        current_status_down = False
+        try:
+            req = urllib.request.Request(target_url, headers={'User-Agent': 'Miky/Failover'})
+            with urllib.request.urlopen(req, timeout=7) as response:
+                if response.status >= 500: current_status_down = True
+        except HTTPError as e:
+            if e.code >= 500: current_status_down = True
+        except URLError: current_status_down = True
+        except Exception: current_status_down = True
+
+        if current_status_down and not hsi_is_down:
+            hsi_is_down = True
+            cmd = f"export DISPLAY=:0 && pkill chromium && sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
+            subprocess.Popen(cmd, shell=True)
+        elif not current_status_down and hsi_is_down:
+            hsi_is_down = False
+            subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+
+def watchdog_browser():
+    global kiosk_lock
+    while True:
+        time.sleep(10)
+        if not kiosk_lock: continue # Si el candado está abierto, permitimos que se cierre
+        
+        try:
+            browser_alive = any("chromium" in p.name().lower() for p in psutil.process_iter(['name']))
+            if not browser_alive:
+                sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
+                subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+        except: pass
+
+threading.Thread(target=watchdog_hsi, daemon=True).start()
+threading.Thread(target=watchdog_browser, daemon=True).start()
+
+
 # =================================================================
 # BASE DE DATOS Y RED
 # =================================================================
