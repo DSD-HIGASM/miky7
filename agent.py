@@ -475,7 +475,9 @@ def status():
         uid = os.getuid()
         output = subprocess.check_output(f"export XDG_RUNTIME_DIR=/run/user/{uid} && pactl get-sink-volume @DEFAULT_SINK@", shell=True, stderr=subprocess.DEVNULL).decode()
         match = re.search(r"(\d+)%", output)
-        if match: vol = match.group(1)
+        if match: 
+            v = int(match.group(1))
+            vol = str(v if v <= 100 else 100)
     except: vol = "Err"
     return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac(), "leader": current_leader, "kiosk_lock": kiosk_lock})
 
@@ -499,7 +501,7 @@ def control():
     if acc == 'refresh': run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
     elif acc == 'clear_cache': run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
     elif acc == 'reboot': os.system("sudo reboot")
-    elif acc == 'toggle_kiosk': # NUEVO COMANDO PARA EL CANDADO
+    elif acc == 'toggle_kiosk': 
         kiosk_lock = request.json.get('state', True)
         return jsonify({"status": "ok", "kiosk_lock": kiosk_lock})
     elif acc == 'update_agent':
@@ -531,7 +533,17 @@ def control():
     elif acc == 'clear_cron':
         os.system("crontab -l 2>/dev/null | grep -v 'dpms' | crontab -")
         return jsonify({"status": "ok"})
-    elif acc == 'vol_up': run_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5%")
+    elif acc == 'vol_up': 
+        try:
+            uid = os.getuid()
+            output = subprocess.check_output(f"export XDG_RUNTIME_DIR=/run/user/{uid} && pactl get-sink-volume @DEFAULT_SINK@", shell=True, stderr=subprocess.DEVNULL).decode()
+            match = re.search(r"(\d+)%", output)
+            if match and int(match.group(1)) >= 95:
+                run_cmd("pactl set-sink-volume @DEFAULT_SINK@ 100%")
+            else:
+                run_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5%")
+        except: 
+            run_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5%")
     elif acc == 'vol_down': run_cmd("pactl set-sink-volume @DEFAULT_SINK@ -5%")
     return jsonify({"status": "ok"})
 
