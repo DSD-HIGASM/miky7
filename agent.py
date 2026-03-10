@@ -13,10 +13,27 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # =================================================================
+# VARIABLES DE ESTADO LOCAL
+# =================================================================
+kiosk_lock = True
+
+# =================================================================
 # INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO INSTITUCIONAL
 # =================================================================
-def setup_mantenimiento_ui():
-    html_path = os.path.expanduser("~/control_remoto/mantenimiento.html")
+def get_existing_logo_name():
+    t_dir = os.path.expanduser('~/control_remoto')
+    for ext in ['png', 'jpg', 'jpeg', 'svg', 'gif', 'webp']:
+        if os.path.exists(os.path.join(t_dir, f"logo_hospital.{ext}")):
+            return f"logo_hospital.{ext}"
+    return "logo_hospital.jpg"
+
+def setup_mantenimiento_ui(custom_logo=None):
+    t_dir = os.path.expanduser("~/control_remoto")
+    os.makedirs(t_dir, exist_ok=True)
+    
+    logo_file = custom_logo if custom_logo else get_existing_logo_name()
+    html_path = os.path.join(t_dir, "mantenimiento.html")
+    
     html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -203,9 +220,9 @@ def setup_mantenimiento_ui():
 
     <footer class="footer-bar">
         <div class="footer-logos">
-            <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
+            <img src="{LOGO_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital">
             <div class="logo-separator"></div>
-            <img src="logo_hospital.jpg" alt="{HOSPITAL_NAME}" class="logo-hospital">
+            <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
         </div>
         <div class="reconnect-status">
             <div class="spinner"></div>
@@ -216,8 +233,8 @@ def setup_mantenimiento_ui():
 </html>"""
 
     html_content = html_content.replace("{HOSPITAL_NAME}", HOSPITAL_NAME)
+    html_content = html_content.replace("{LOGO_HOSP}", logo_file)
 
-    os.makedirs(os.path.dirname(html_path), exist_ok=True)
     with open(html_path, "w", encoding="utf-8") as f: 
         f.write(html_content)
 
@@ -234,11 +251,16 @@ CACHE_DIR = os.path.expanduser("~/.config/chromium-kiosko-hsi/Default/Cache/*")
 DB_FILE = os.path.expanduser("~/miki_db.json")
 
 def load_db():
+    default_db = {"pcs": [], "tgToken": "", "tgChat": "", "sectors": [], "globalDefault": "", "maintUrl": "local"}
     if os.path.exists(DB_FILE):
         try:
-            with open(DB_FILE, 'r') as f: return json.load(f)
+            with open(DB_FILE, 'r') as f: 
+                data = json.load(f)
+                if not data.get("maintUrl"):
+                    data["maintUrl"] = "local"
+                return data
         except: pass
-    return {"pcs": [], "tgToken": "", "tgChat": "", "sectors": [], "globalDefault": ""}
+    return default_db
 
 def save_db(data):
     try:
@@ -255,16 +277,19 @@ def get_local_ip():
     return ip
 
 # =================================================================
-# WATCHDOG FAILOVER
+# WATCHDOG DE RED (Failover HSI) Y DE PROCESO
 # =================================================================
 hsi_is_down = False
+
 def watchdog_hsi():
-    global hsi_is_down
+    global hsi_is_down, kiosk_lock
     maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
     sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
     
     while True:
         time.sleep(15) 
+        if not kiosk_lock: continue
+        
         try:
             with open(STARTUP_URL_FILE, 'r') as f: target_url = f.read().strip()
         except: continue
@@ -282,13 +307,27 @@ def watchdog_hsi():
 
         if current_status_down and not hsi_is_down:
             hsi_is_down = True
-            cmd = f"export DISPLAY=:0 && pkill chromium && sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
+            cmd = f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
             subprocess.Popen(cmd, shell=True)
         elif not current_status_down and hsi_is_down:
             hsi_is_down = False
-            subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+            subprocess.Popen(f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+
+def watchdog_browser():
+    global kiosk_lock
+    while True:
+        time.sleep(10)
+        if not kiosk_lock: continue 
+        
+        try:
+            browser_alive = any("chromium" in p.name().lower() for p in psutil.process_iter(['name']))
+            if not browser_alive:
+                sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
+                subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+        except: pass
 
 threading.Thread(target=watchdog_hsi, daemon=True).start()
+threading.Thread(target=watchdog_browser, daemon=True).start()
 
 # =================================================================
 # CLÚSTER MESH: V3.1 - Liderazgo Estricto
@@ -404,6 +443,7 @@ def post_sync():
 
 @app.route('/status', methods=['GET'])
 def status():
+    global kiosk_lock
     try: cpu = psutil.cpu_percent(interval=0.1)
     except: cpu = 0
     try: 
@@ -414,37 +454,83 @@ def status():
         uid = os.getuid()
         output = subprocess.check_output(f"export XDG_RUNTIME_DIR=/run/user/{uid} && pactl get-sink-volume @DEFAULT_SINK@", shell=True, stderr=subprocess.DEVNULL).decode()
         match = re.search(r"(\d+)%", output)
-        if match: vol = match.group(1)
+        if match: 
+            v = int(match.group(1))
+            vol = str(v if v <= 100 else 100)
     except: vol = "Err"
-    return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac(), "leader": current_leader})
+    return jsonify({"status": "online", "cpu": cpu, "url": url, "vol": vol, "mac": get_mac(), "leader": current_leader, "kiosk_lock": kiosk_lock})
 
 @app.route('/set_startup', methods=['POST'])
 def set_startup():
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     url = request.json.get('url')
     
-    if url == "local":
+    if not url or str(url).strip() == "" or url == "local":
         url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
         
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
-    os.system(f"nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
+    
+    os.system(f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
+    
     return jsonify({"status": "ok", "url": url})
 
 @app.route('/control', methods=['POST'])
 def control():
+    global kiosk_lock
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     acc = request.json.get('accion')
     if acc == 'refresh': run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
     elif acc == 'clear_cache': run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
     elif acc == 'reboot': os.system("sudo reboot")
+    elif acc == 'toggle_kiosk': 
+        kiosk_lock = request.json.get('state', True)
+        return jsonify({"status": "ok", "kiosk_lock": kiosk_lock})
     elif acc == 'update_agent':
         repo_url = request.json.get('url')
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
-            cmd = f"sleep 2 && wget -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && sudo reboot"
+            min_url = repo_url.replace("agent.py", "ministerio.svg")
+            
+            # IGUAL QUE EL INSTALL.SH: IPv4 forzado y comillas dobles
+            cmd = f'sleep 2 && wget -4 -qO /tmp/new_agent.py "{repo_url}" && mv /tmp/new_agent.py {install_path}/agent.py && wget -4 -qO {os.path.expanduser("~/control_remoto")}/ministerio.svg "{min_url}" && sudo reboot'
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
         return jsonify({"error": "Falta URL"}), 400
+    
+    elif acc == 'update_logos':
+        url_hosp = request.json.get('url_hospital')
+        url_min = request.json.get('url_ministerio')
+        if url_hosp and url_min:
+            def download_logos():
+                t_dir = os.path.expanduser('~/control_remoto')
+                os.makedirs(t_dir, exist_ok=True)
+                
+                # Sigue detectando el formato dinámicamente de la URL
+                ext = "jpg"
+                u_lower = url_hosp.lower()
+                if ".png" in u_lower: ext = "png"
+                elif ".svg" in u_lower: ext = "svg"
+                elif ".gif" in u_lower: ext = "gif"
+                elif ".webp" in u_lower: ext = "webp"
+                elif ".jpeg" in u_lower: ext = "jpeg"
+                
+                logo_name = f"logo_hospital.{ext}"
+                
+                # Limpia los viejos
+                os.system(f"rm -f {t_dir}/logo_hospital.*")
+                
+                # EXACTAMENTE LA MISMA SINTAXIS DEL INSTALL.SH (-4 y comillas dobles)
+                subprocess.run(f'wget -4 -qO {t_dir}/{logo_name} "{url_hosp}"', shell=True)
+                subprocess.run(f'wget -4 -qO {t_dir}/ministerio.svg "{url_min}"', shell=True)
+                
+                # Reconstruye el HTML con el nombre exacto y F5
+                setup_mantenimiento_ui(custom_logo=logo_name)
+                run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+
+            threading.Thread(target=download_logos).start()
+            return jsonify({"status": "ok", "msg": "Logos actualizados"})
+        return jsonify({"error": "Faltan URLs"}), 400
+        
     elif acc == 'wol':
         target_mac = request.json.get('mac')
         if target_mac: send_wol(target_mac)
@@ -466,7 +552,17 @@ def control():
     elif acc == 'clear_cron':
         os.system("crontab -l 2>/dev/null | grep -v 'dpms' | crontab -")
         return jsonify({"status": "ok"})
-    elif acc == 'vol_up': run_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5%")
+    elif acc == 'vol_up': 
+        try:
+            uid = os.getuid()
+            output = subprocess.check_output(f"export XDG_RUNTIME_DIR=/run/user/{uid} && pactl get-sink-volume @DEFAULT_SINK@", shell=True, stderr=subprocess.DEVNULL).decode()
+            match = re.search(r"(\d+)%", output)
+            if match and int(match.group(1)) >= 95:
+                run_cmd("pactl set-sink-volume @DEFAULT_SINK@ 100%")
+            else:
+                run_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5%")
+        except: 
+            run_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5%")
     elif acc == 'vol_down': run_cmd("pactl set-sink-volume @DEFAULT_SINK@ -5%")
     return jsonify({"status": "ok"})
 

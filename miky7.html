@@ -5,6 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MIKY 7 - Mesh Command Center</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath fill='%230ea5e9' d='M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,176a72,72,0,1,1,72-72A72.08,72.08,0,0,1,128,200Zm0-112a40,40,0,1,0,40,40A40,40,0,0,0,128,88Z'/%3E%3C/svg%3E" type="image/svg+xml" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <link
@@ -222,7 +223,8 @@
             </div>
             <div id="empty-msg" class="hidden flex-col items-center justify-center h-[60vh] opacity-40">
                 <div class="w-16 h-16 bg-slate-200 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-4">
-                    <i class="ph ph-terminal-window text-3xl"></i></div>
+                    <i class="ph ph-terminal-window text-3xl"></i>
+                </div>
                 <h3 class="text-lg font-bold">Sin Equipos</h3>
                 <p class="text-slate-500 mt-1 text-xs">Añade terminales manualmente o usa Auto-Descubrir.</p>
             </div>
@@ -293,7 +295,8 @@
             <div class="flex items-center gap-3 mb-3">
                 <div
                     class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center text-red-600">
-                    <i class="ph-bold ph-warning text-xl"></i></div>
+                    <i class="ph-bold ph-warning text-xl"></i>
+                </div>
                 <h3 id="confirmTitle" class="text-base font-bold text-slate-800 dark:text-white"></h3>
             </div>
             <p id="confirmMsg" class="text-xs text-slate-500 dark:text-zinc-400 mb-5 whitespace-pre-line ml-13"></p>
@@ -421,8 +424,8 @@
                     class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Inventario
                     & Agendas</button>
                 <button onclick="switchTab('tab-ota')" id="btn-tab-ota"
-                    class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Despliegue
-                    OTA</button>
+                    class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">OTA
+                    & Branding</button>
                 <button onclick="switchTab('tab-tg')" id="btn-tab-tg"
                     class="config-tab-btn py-4 font-black transition-all outline-none border-b-2 border-transparent text-slate-400 uppercase tracking-widest whitespace-nowrap">Alertas
                     Telegram</button>
@@ -493,10 +496,11 @@
                 </div>
 
                 <div id="tab-ota" class="tab-content hidden space-y-4">
-                    <div class="bg-indigo-500/10 border border-indigo-500/30 p-5 rounded-xl">
+                    <div class="bg-indigo-500/10 border border-indigo-500/30 p-5 rounded-xl mb-4">
                         <h4
                             class="text-sm font-black text-indigo-600 dark:text-indigo-400 flex items-center gap-2 mb-2">
-                            <i class="ph-fill ph-cloud-arrow-down"></i> Actualización OTA</h4>
+                            <i class="ph-fill ph-cloud-arrow-down"></i> Actualización OTA (Backend)
+                        </h4>
                         <label class="text-[10px] font-black text-indigo-500 uppercase block mb-1">URL Raw de GitHub
                             (agent.py)</label>
                         <div class="flex gap-2">
@@ -506,6 +510,24 @@
                                 class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg text-xs font-bold shadow-md flex items-center gap-2"><i
                                     class="ph-bold ph-rocket-launch text-lg"></i> DEPLOY</button>
                         </div>
+                    </div>
+
+                    <div class="bg-pink-500/10 border border-pink-500/30 p-5 rounded-xl">
+                        <h4 class="text-sm font-black text-pink-600 dark:text-pink-400 flex items-center gap-2 mb-2">
+                            <i class="ph-fill ph-image"></i> Despliegue de Branding (Logos)
+                        </h4>
+                        <label class="text-[10px] font-black text-pink-500 uppercase block mb-1">URL Logo Hospital
+                            (JPG/PNG directo)</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="cfg-logo-hosp" placeholder="https://mi-hospital.com/logo.png"
+                                class="flex-1 bg-white dark:bg-black border border-pink-500/20 focus:border-pink-500 rounded-lg p-2.5 font-mono text-xs outline-none text-pink-600" />
+                            <button onclick="fireUpdateLogos()"
+                                class="bg-pink-600 hover:bg-pink-700 text-white px-6 py-2.5 rounded-lg text-xs font-bold shadow-md flex items-center gap-2"><i
+                                    class="ph-bold ph-paper-plane-right text-lg"></i> ACTUALIZAR LOGOS</button>
+                        </div>
+                        <p class="text-[10px] text-pink-600/70 mt-2 font-medium">Esta acción inyectará tu logo y
+                            sincronizará en simultáneo el <b>ministerio.svg</b> usando la ruta base de GitHub
+                            configurada arriba.</p>
                     </div>
                 </div>
 
@@ -542,8 +564,7 @@
     <script>
         // CONFIGURACIÓN DEL CLIENTE
         let clientConfig = { knownIps: [], masterPass: "" };
-        // BASE DE DATOS DEL CLUSTER (Limpia)
-        let db = { globalDefault: "", maintUrl: "local", sectors: ["General"], pcs: [], tgToken: "", tgChat: "", otaUrl: "" };
+        let db = { globalDefault: "", maintUrl: "local", sectors: ["General"], pcs: [], tgToken: "", tgChat: "", otaUrl: "", logoUrl: "" };
         let ui = { view: "grid", tab: "Todos", query: "", theme: "dark", isSyncing: false, activeNode: null };
         let clusterLeader = null;
         let offlineCounters = {};
@@ -622,7 +643,12 @@
 
                     if (res.ok) {
                         const data = await res.json();
-                        if (data.db && data.db.pcs) db = { ...db, ...data.db };
+                        if (data.db && data.db.pcs) {
+                            db = { ...db, ...data.db };
+                            // BLINDAJE: Si la base de datos de la terminal viene sin url de mantenimiento, fuerza local
+                            if (!db.maintUrl) db.maintUrl = "local";
+                            db.pcs.forEach(p => { p.fetchingImg = false; p.lastScreenshot = null; });
+                        }
 
                         clusterLeader = data.current_leader;
                         ui.activeNode = ip;
@@ -635,7 +661,7 @@
                         closeSysModal('connectModal', 'connectPanel', 'connectBackdrop');
                         showToast(`Conectado exitosamente vía ${ip}`, "success");
                         document.getElementById('lbl-active-node').innerText = ip;
-                        document.getElementById('node-pulse').className = "w-2 h-2 rounded-full bg-emerald-500 online-pulse";
+                        document.getElementById('node-pulse').className = "w-2 h-2 rounded-full bg-emerald-50 online-pulse";
 
                         renderSectorsNav();
                         updateUIGrid();
@@ -700,11 +726,18 @@
             let targetIps = new Set(db.pcs.map(p => p.ip).filter(ip => ip));
             if (ui.activeNode) targetIps.add(ui.activeNode);
 
+            const safeDb = JSON.parse(JSON.stringify(db));
+            safeDb.pcs.forEach(p => {
+                delete p.lastScreenshot;
+                delete p.fetchingImg;
+                delete p.kiosk_lock;
+            });
+
             const promises = Array.from(targetIps).map(ip => {
                 return fetch(`http://${ip}:5000/sync`, {
                     method: 'POST',
                     headers: headers(),
-                    body: JSON.stringify(db)
+                    body: JSON.stringify(safeDb)
                 }).catch(() => null);
             });
             await Promise.all(promises);
@@ -758,6 +791,7 @@
                         online++;
                         const data = await res.json();
                         pc.mac = data.mac;
+                        pc.kiosk_lock = data.kiosk_lock;
                         if (data.leader) clusterLeader = data.leader;
                         updatePCStatus(pc.id, true, data);
                         offlineCounters[pc.id] = 0;
@@ -769,7 +803,6 @@
                 }
             }
 
-            // AUTO-FAILOVER DEL DASHBOARD
             const activePc = db.pcs.find(p => p.ip === ui.activeNode);
             if (activePc && offlineCounters[activePc.id] > 2) {
                 document.getElementById('node-pulse').className = "w-2 h-2 rounded-full bg-red-500 danger-pulse";
@@ -800,6 +833,30 @@
                     gridVol.innerText = `${meta.vol}%`; gridUrl.innerText = meta.url;
                     const cpuVal = Math.round(meta.cpu); gridCpu.innerText = `${cpuVal}%`;
                     if (cpuVal > 85) gridCpu.classList.add("danger-pulse"); else gridCpu.classList.remove("danger-pulse");
+
+                    const btnVolDown = document.getElementById(`btn-voldown-${id}`);
+                    const btnVolUp = document.getElementById(`btn-volup-${id}`);
+                    if (btnVolDown && btnVolUp) {
+                        if (meta.vol === "Err") {
+                            btnVolDown.disabled = true; btnVolUp.disabled = true;
+                        } else {
+                            const v = parseInt(meta.vol);
+                            btnVolDown.disabled = (v <= 0);
+                            btnVolUp.disabled = (v >= 100);
+                        }
+                    }
+
+                    if (meta.kiosk_lock !== undefined) {
+                        const isL = meta.kiosk_lock !== false;
+
+                        const bG = document.getElementById(`lock-btn-${id}`), iG = document.getElementById(`lock-icon-${id}`);
+                        if (bG) { bG.className = `w-8 h-7 border hover:text-white rounded-lg flex items-center justify-center transition-colors ${isL ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500' : 'bg-amber-500/10 text-amber-600 border-amber-500/20 hover:bg-amber-500'}`; bG.setAttribute('onclick', `toggleKioskLock('${id}', ${!isL})`); bG.title = isL ? 'Watchdog Activo' : 'Watchdog Pausado'; }
+                        if (iG) iG.className = `ph-bold text-sm ${isL ? 'ph-lock-key' : 'ph-lock-key-open'}`;
+
+                        const bL = document.getElementById(`llock-btn-${id}`), iL = document.getElementById(`llock-icon-${id}`);
+                        if (bL) { bL.className = `p-1.5 rounded-md ${isL ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 hover:bg-emerald-500 hover:text-white' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 hover:bg-amber-500 hover:text-white'}`; bL.setAttribute('onclick', `toggleKioskLock('${id}', ${!isL})`); bL.title = isL ? 'Pausar Watchdog' : 'Activar Watchdog'; }
+                        if (iL) iL.className = `ph-bold text-sm ${isL ? 'ph-lock-key' : 'ph-lock-key-open'}`;
+                    }
                 }
             }
         }
@@ -909,8 +966,22 @@
             sendCommand(alivePc.id, "wol", { mac: deadPc.mac }, true);
         }
 
+        function fetchMissingScreenshots() {
+            if (ui.view !== 'grid') return;
+            let delay = 100;
+            db.pcs.forEach(pc => {
+                if (pc.ip && !pc.lastScreenshot && !pc.fetchingImg) {
+                    pc.fetchingImg = true;
+                    setTimeout(() => takeScreenshot(pc.id), delay);
+                    delay += 1000;
+                }
+            });
+        }
+
         async function takeScreenshot(pcId) {
             const pc = db.pcs.find((p) => p.id == pcId);
+            if (!pc || !pc.ip) return;
+
             const icon = document.getElementById(`cam-${pcId}`);
             if (icon) icon.className = "ph-bold ph-circle-notch spinner";
             try {
@@ -918,11 +989,20 @@
                 if (res.ok) {
                     const data = await res.json();
                     if (data.image) {
+                        pc.lastScreenshot = `data:image/png;base64,${data.image}`;
                         const img = document.getElementById(`img-${pcId}`);
-                        if (img) { img.src = `data:image/png;base64,${data.image}`; img.classList.replace("opacity-40", "opacity-90"); }
+                        if (img) {
+                            img.src = pc.lastScreenshot;
+                            img.classList.replace("opacity-40", "opacity-90");
+                        }
                     }
                 }
-            } catch (e) { } finally { if (icon) icon.className = "ph-bold ph-camera-plus text-base"; }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                if (icon) icon.className = "ph-bold ph-camera-plus text-base";
+                if (pc) pc.fetchingImg = false;
+            }
         }
 
         async function fireOTA() {
@@ -933,6 +1013,29 @@
                 showToast("Pipeline OTA Iniciado...", "info");
                 for (let pc of db.pcs) await sendCommand(pc.id, "update_agent", { url: url }, true);
                 showToast("OTA finalizado.", "success");
+            }
+        }
+
+        async function fireUpdateLogos() {
+            const urlHosp = document.getElementById("cfg-logo-hosp").value.trim();
+            const otaUrl = document.getElementById("cfg-ota-url").value.trim();
+
+            if (!urlHosp) { showToast("Ingresa la URL del logo del Hospital", "error"); return; }
+            if (!otaUrl.includes("raw.githubusercontent") || !otaUrl.includes("agent.py")) {
+                showToast("Configura primero una URL OTA de GitHub válida arriba para ubicar el SVG del Ministerio.", "error");
+                return;
+            }
+
+            const urlMin = otaUrl.replace("agent.py", "ministerio.svg");
+
+            if (await showConfirm("Actualizar Logos Institucionales", `¿Desplegar el nuevo logo del hospital y sincronizar el SVG del ministerio en los ${db.pcs.length} equipos de la red?`)) {
+                db.logoUrl = urlHosp;
+                pushDbToCluster();
+                showToast("Pipeline de Branding Iniciado...", "info");
+                for (let pc of db.pcs) {
+                    await sendCommand(pc.id, "update_logos", { url_hospital: urlHosp, url_ministerio: urlMin }, true);
+                }
+                showToast("Logos actualizados correctamente.", "success");
             }
         }
 
@@ -955,6 +1058,14 @@
                 else out.innerHTML += `<p class="err">-bash: ${cmd}: command not found</p>`;
                 out.scrollTop = out.scrollHeight;
             }
+        }
+
+        async function toggleKioskLock(pcId, targetState) {
+            await sendCommand(pcId, 'toggle_kiosk', { state: targetState }, true);
+            const pc = db.pcs.find(p => p.id == pcId);
+            if (pc) pc.kiosk_lock = targetState;
+            updateUIGrid();
+            showToast(`Guardianes de Kiosko ${targetState ? 'ACTIVADOS' : 'PAUSADOS'} en ${pc.name}`, targetState ? "success" : "warning");
         }
 
         function updateUIGrid() {
@@ -980,6 +1091,12 @@
 
                 let leaderCrown = pc.ip === clusterLeader ? `<i class="ph-fill ph-crown text-amber-500 ml-1 text-[14px]" title="Nodo Capitán (Gestor Telegram)"></i>` : ``;
 
+                const isLocked = pc.kiosk_lock !== false;
+                let lockBtnGrid = `<button id="lock-btn-${pc.id}" onclick="toggleKioskLock('${pc.id}', ${!isLocked})" class="w-8 h-7 ${isLocked ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500' : 'bg-amber-500/10 text-amber-600 border-amber-500/20 hover:bg-amber-500'} border hover:text-white rounded-lg flex items-center justify-center transition-colors" title="${isLocked ? 'Watchdog Activo' : 'Watchdog Pausado'}"><i id="lock-icon-${pc.id}" class="ph-bold ${isLocked ? 'ph-lock-key' : 'ph-lock-key-open'} text-sm"></i></button>`;
+
+                const imgSrc = pc.lastScreenshot || "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+                const imgOp = pc.lastScreenshot ? "opacity-90" : "opacity-40";
+
                 grid.innerHTML += `
                 <div class="bg-white dark:bg-surface-accent border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden flex flex-col shadow-sm group relative">
                     <button onclick="openTerminal('${pc.id}')" class="absolute top-2 left-2 z-10 bg-black/60 hover:bg-black text-green-400 p-1.5 rounded-lg backdrop-blur font-mono text-[10px] opacity-0 group-hover:opacity-100 transition-opacity border border-white/10" title="Terminal SSH">&gt;_</button>
@@ -994,7 +1111,7 @@
                         </div>
                     </div>
                     <div class="relative bg-black h-36 flex items-center justify-center cursor-zoom-in overflow-hidden group/img" onclick="openImageModal('${pc.id}')">
-                        <img id="img-${pc.id}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="max-w-full max-h-full object-contain opacity-40">
+                        <img id="img-${pc.id}" src="${imgSrc}" class="max-w-full max-h-full object-contain ${imgOp}">
                         <span id="url-${pc.id}" class="absolute bottom-2 left-2 text-[8px] text-white/70 font-mono bg-black/60 px-2 py-1 rounded-md max-w-[90%] truncate">Conectando...</span>
                         <div class="absolute inset-0 bg-black/80 hidden flex-col items-center justify-center backdrop-blur-sm z-20" id="wol-btn-${pc.id}">
                             <button onclick="event.stopPropagation(); triggerWakeOnLan('${pc.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-lg">WAKE ON LAN</button>
@@ -1005,8 +1122,8 @@
                         ${dynamicBtnsGrid}
                         <div class="flex justify-between gap-1 mb-2">
                             <div class="flex bg-white dark:bg-black rounded-lg border border-slate-200 dark:border-zinc-800 shrink-0">
-                                <button onclick="sendCommand('${pc.id}','vol_down')" class="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-l-lg text-slate-500 hover:text-brand-500"><i class="ph-bold ph-minus text-xs"></i></button>
-                                <button onclick="sendCommand('${pc.id}','vol_up')" class="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-r-lg text-slate-500 hover:text-brand-500 border-l border-slate-200 dark:border-zinc-800"><i class="ph-bold ph-plus text-xs"></i></button>
+                                <button id="btn-voldown-${pc.id}" onclick="sendCommand('${pc.id}','vol_down')" class="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-l-lg text-slate-500 hover:text-brand-500 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"><i class="ph-bold ph-minus text-xs"></i></button>
+                                <button id="btn-volup-${pc.id}" onclick="sendCommand('${pc.id}','vol_up')" class="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-r-lg text-slate-500 hover:text-brand-500 border-l border-slate-200 dark:border-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"><i class="ph-bold ph-plus text-xs"></i></button>
                             </div>
                             <button onclick="sendCommand('${pc.id}','refresh')" class="flex-1 bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 hover:border-brand-500 text-slate-700 dark:text-zinc-300 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center gap-1" title="F5"><i class="ph-bold ph-arrows-clockwise text-xs"></i></button>
                             <button onclick="sendCommand('${pc.id}','startup',{url: db.globalDefault},false)" class="w-8 bg-brand-50 dark:bg-brand-900/20 text-brand-600 border border-brand-200 dark:border-brand-800 hover:bg-brand-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Lanzar URL Global"><i class="ph-bold ph-globe text-sm"></i></button>
@@ -1014,6 +1131,7 @@
                         </div>
                         <div class="flex justify-between gap-1">
                             ${cronBtnGrid}
+                            ${lockBtnGrid}
                             <button onclick="sendCommand('${pc.id}','startup',{url: db.maintUrl})" class="w-8 h-7 bg-orange-500/10 text-orange-600 border border-orange-500/20 hover:bg-orange-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Mantenimiento"><i class="ph-fill ph-warning text-sm"></i></button>
                             <button onclick="sendCommand('${pc.id}','reboot',{},true)" class="w-8 h-7 bg-red-500/10 text-red-600 border border-red-500/20 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Reiniciar Hard"><i class="ph-bold ph-power text-sm"></i></button>
                         </div>
@@ -1029,11 +1147,16 @@
                             <button onclick="sendCommand('${pc.id}','startup',{url: db.globalDefault},false)" class="p-1.5 bg-brand-50 dark:bg-brand-900/20 text-brand-600 rounded-md hover:bg-brand-500 hover:text-white" title="Lanzar URL Global"><i class="ph-bold ph-globe text-sm"></i></button>
                             <button onclick="askIndividualUrl('${pc.id}')" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-slate-500" title="URL Manual"><i class="ph-bold ph-link text-sm"></i></button>
                             <button onclick="openCronModal('${pc.id}')" class="p-1.5 rounded-md ${pc.cron ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-600' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:text-purple-500'}" title="Cron"><i class="ph-bold ph-clock text-sm"></i></button>
+                            <button id="llock-btn-${pc.id}" onclick="toggleKioskLock('${pc.id}', ${!isLocked})" class="p-1.5 rounded-md ${isLocked ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 hover:bg-emerald-500 hover:text-white' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 hover:bg-amber-500 hover:text-white'}" title="${isLocked ? 'Pausar Watchdog' : 'Activar Watchdog'}"><i id="llock-icon-${pc.id}" class="ph-bold ${isLocked ? 'ph-lock-key' : 'ph-lock-key-open'} text-sm"></i></button>
                             <button onclick="sendCommand('${pc.id}','reboot',{},true)" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-red-500"><i class="ph-bold ph-power text-sm"></i></button>
                         </div>
                     </td>
                 </tr>`;
             });
+
+            if (ui.view === 'grid') {
+                setTimeout(fetchMissingScreenshots, 300);
+            }
         }
 
         function setTab(name) { ui.tab = name; renderSectorsNav(); updateUIGrid(); }
@@ -1069,17 +1192,19 @@
         function openModals(i, p, b) { document.getElementById(i).classList.remove("hidden"); setTimeout(() => { document.getElementById(b).classList.replace("opacity-0", "opacity-100"); document.getElementById(p).classList.replace("scale-95", "scale-100"); document.getElementById(p).classList.replace("opacity-0", "opacity-100"); }, 10); }
         function closeModals() { ["config", "image", "terminal"].forEach((m) => { const w = document.getElementById(`${m}Modal`), p = document.getElementById(`${m}Panel`), b = document.getElementById(`${m}Backdrop`); if (w && !w.classList.contains("hidden")) { b.classList.replace("opacity-100", "opacity-0"); p.classList.replace("scale-100", "scale-95"); p.classList.replace("opacity-100", "opacity-0"); setTimeout(() => w.classList.add("hidden"), 200); } }); }
 
-        function openConfig() { document.getElementById("cfg-token").value = clientConfig.masterPass; document.getElementById("cfg-base").value = db.globalDefault; document.getElementById("cfg-panic").value = db.maintUrl; document.getElementById("cfg-tg-token").value = db.tgToken; document.getElementById("cfg-tg-chat").value = db.tgChat; document.getElementById("cfg-ota-url").value = db.otaUrl || ""; renderTaxList(); renderPCList(); openModals("configModal", "configPanel", "configBackdrop"); }
+        function openConfig() { document.getElementById("cfg-token").value = clientConfig.masterPass; document.getElementById("cfg-base").value = db.globalDefault; document.getElementById("cfg-panic").value = db.maintUrl; document.getElementById("cfg-tg-token").value = db.tgToken; document.getElementById("cfg-tg-chat").value = db.tgChat; document.getElementById("cfg-ota-url").value = db.otaUrl || ""; document.getElementById("cfg-logo-hosp").value = db.logoUrl || ""; renderTaxList(); renderPCList(); openModals("configModal", "configPanel", "configBackdrop"); }
         function switchTab(id) { document.querySelectorAll(".tab-content").forEach((c) => c.classList.add("hidden")); document.getElementById(id).classList.remove("hidden"); document.querySelectorAll(".config-tab-btn").forEach((b) => b.classList.remove("config-active-tab")); document.getElementById(`btn-${id}`).classList.add("config-active-tab"); }
 
         function saveAllAndSync() {
             clientConfig.masterPass = document.getElementById("cfg-token").value.trim();
             localStorage.setItem("miky_client_conf", JSON.stringify(clientConfig));
             db.globalDefault = document.getElementById("cfg-base").value.trim();
-            db.maintUrl = document.getElementById("cfg-panic").value.trim();
+            // BLINDAJE: Si el usuario borra la url de mantenimiento, fuerza local.
+            db.maintUrl = document.getElementById("cfg-panic").value.trim() || "local";
             db.tgToken = document.getElementById("cfg-tg-token").value.trim();
             db.tgChat = document.getElementById("cfg-tg-chat").value.trim();
             db.otaUrl = document.getElementById("cfg-ota-url").value.trim();
+            db.logoUrl = document.getElementById("cfg-logo-hosp").value.trim();
 
             pushDbToCluster();
             renderSectorsNav(); updateUIGrid(); closeModals();
