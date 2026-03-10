@@ -33,8 +33,10 @@ def setup_mantenimiento_ui(custom_logo=None):
     
     logo_file = custom_logo if custom_logo else get_existing_logo_name()
     html_path = os.path.join(t_dir, "mantenimiento.html")
-    
-    html_content = """<!DOCTYPE html>
+
+    html_content  = """
+
+    <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -43,7 +45,7 @@ def setup_mantenimiento_ui(custom_logo=None):
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Encode+Sans:wght@700;900&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
     <style>
         :root {
@@ -54,21 +56,27 @@ def setup_mantenimiento_ui(custom_logo=None):
             --card-bg: #ffffff;
             --text-main: #0f172a;
             --text-muted: #475569;
+            
+            /* Variables de tipografía */
+            --font-title: 'Encode Sans', system-ui, -apple-system, sans-serif;
+            --font-body: 'Roboto', system-ui, -apple-system, sans-serif;
         }
         
         * { box-sizing: border-box; }
         
+        /* Bloqueo absoluto a la pantalla, sin scroll */
         body, html {
             margin: 0; padding: 0; 
             height: 100vh; width: 100vw;
             background-color: var(--bg-main);
-            font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+            font-family: var(--font-body); /* Roboto para todo el cuerpo por defecto */
             overflow: hidden; 
             display: flex; flex-direction: column;
         }
         
         .pba-gradient-bar {
-            height: 22px;
+            height: 2vh; 
+            min-height: 15px;
             width: 100%;
             background: linear-gradient(90deg, var(--pba-pink) 0%, var(--pba-blue) 50%, var(--pba-cyan) 100%);
             flex-shrink: 0;
@@ -77,58 +85,68 @@ def setup_mantenimiento_ui(custom_logo=None):
         .content-wrapper {
             flex: 1; display: flex; flex-direction: column;
             align-items: center; justify-content: center;
-            padding: 2rem;
+            padding: 2vw;
+            overflow: hidden;
         }
 
         .glass-card {
             background: var(--card-bg);
             border-radius: 1.5rem;
-            padding: 3.5rem 5rem;
+            padding: 5vh 5vw;
             box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0,0,0,0.02);
             text-align: center;
-            max-width: 80vw;
-            display: flex; flex-direction: column; align-items: center;
+            width: 85vw;
+            max-width: 1200px;
+            max-height: 80vh; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
 
         .icon-container {
             background-color: rgba(232, 31, 118, 0.08); 
             border-radius: 50%;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+            padding: 2.5vh;
+            margin-bottom: 3vh;
             animation: pulse-soft 3s ease-in-out infinite;
         }
 
         .warning-icon {
-            width: 70px; height: 70px; 
+            width: clamp(50px, 6vw, 90px); 
+            height: clamp(50px, 6vw, 90px); 
             color: var(--pba-pink);
         }
 
+        /* Encode Sans aplicada al título */
         h1 {
-            font-size: 3.2rem; font-weight: 900;
+            font-family: var(--font-title);
+            font-size: clamp(2.5rem, 4vw, 4.5rem); 
+            font-weight: 900;
             color: var(--text-main);
-            margin: 0 0 1rem 0;
+            margin: 0 0 1.5vh 0;
             text-transform: uppercase; 
             letter-spacing: -1px; line-height: 1.1;
         }
 
+        /* Roboto se hereda para el resto de los textos */
         .subtitle {
-            font-size: 1.8rem; font-weight: 400;
+            font-size: clamp(1.5rem, 2.2vw, 2.5rem); 
+            font-weight: 400;
             color: var(--text-muted);
-            margin: 0 0 3rem 0;
+            margin: 0 0 4vh 0;
             line-height: 1.3;
         }
 
         .instruction-box {
             background: rgba(65, 112, 153, 0.06); 
             border: 2px solid rgba(65, 112, 153, 0.15);
-            border-left: 10px solid var(--pba-blue);
-            padding: 2.5rem 4rem;
+            border-left: 1vw solid var(--pba-blue);
+            padding: 4vh 4vw;
             border-radius: 1rem 1.5rem 1.5rem 1rem;
             display: inline-block;
         }
 
         .instruction-box p {
-            font-size: 2.2rem; font-weight: 500;
+            font-size: clamp(1.8rem, 2.8vw, 3.2rem); 
+            font-weight: 500;
             color: var(--text-main);
             margin: 0; line-height: 1.35;
         }
@@ -140,8 +158,10 @@ def setup_mantenimiento_ui(custom_logo=None):
 
         .footer-bar {
             background-color: var(--card-bg);
-            padding: 0 4rem;
-            height: 110px;
+            padding: 0 3vw;
+            height: 12vh;
+            min-height: 80px;
+            max-height: 120px;
             display: flex; justify-content: space-between; align-items: center;
             border-top: 1px solid rgba(0,0,0,0.08);
             box-shadow: 0 -4px 20px rgba(0,0,0,0.03);
@@ -149,39 +169,42 @@ def setup_mantenimiento_ui(custom_logo=None):
         }
 
         .footer-logos {
-            display: flex; align-items: center; gap: 2.5rem;
+            display: flex; align-items: center; gap: 2vw;
             height: 100%;
         }
 
         .logo-separator {
-            height: 45px;
+            height: 50%;
             width: 2px;
             background-color: #cbd5e1;
             border-radius: 2px;
         }
 
         .logo-provincia {
-            height: 55px; width: auto;
+            height: 60%; 
+            width: auto;
             object-fit: contain;
             mix-blend-mode: multiply;
         }
 
         .logo-hospital {
-            height: 60px; width: auto;
-            max-width: 250px;
+            height: 65%; 
+            width: auto;
+            max-width: 20vw;
             object-fit: contain;
             mix-blend-mode: multiply;
         }
 
         .reconnect-status {
-            display: flex; align-items: center; gap: 1rem;
+            display: flex; align-items: center; gap: 1vw;
             background: var(--bg-main);
-            padding: 1.2rem 2.5rem; border-radius: 100px;
+            padding: 1.5vh 1.5vw; border-radius: 100px;
             border: 1px solid rgba(0,0,0,0.05);
         }
 
         .spinner {
-            width: 22px; height: 22px;
+            width: clamp(20px, 2vw, 30px); 
+            height: clamp(20px, 2vw, 30px);
             border: 4px solid rgba(0, 174, 195, 0.2);
             border-top-color: var(--pba-cyan);
             border-radius: 50%;
@@ -189,12 +212,14 @@ def setup_mantenimiento_ui(custom_logo=None):
         }
 
         .reconnect-status span {
-            font-size: 1.2rem; font-weight: 700; color: var(--pba-cyan); text-transform: uppercase; letter-spacing: 1px;
+            font-size: clamp(1rem, 1.2vw, 1.5rem); 
+            font-weight: 700; color: var(--pba-cyan); 
+            text-transform: uppercase; letter-spacing: 1px;
         }
 
         @keyframes pulse-soft {
             0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(232, 31, 118, 0.2); }
-            50% { transform: scale(1.02); box-shadow: 0 0 0 15px rgba(232, 31, 118, 0); }
+            50% { transform: scale(1.02); box-shadow: 0 0 0 2vw rgba(232, 31, 118, 0); }
         }
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
@@ -210,6 +235,7 @@ def setup_mantenimiento_ui(custom_logo=None):
                 </svg>
             </div>
             <h1>Pantalla en Mantenimiento</h1>
+            
             <p class="subtitle">La atención de pacientes continúa desarrollándose con normalidad.</p>
             
             <div class="instruction-box">
@@ -220,6 +246,7 @@ def setup_mantenimiento_ui(custom_logo=None):
 
     <footer class="footer-bar">
         <div class="footer-logos">
+
             <img src="{LOGO_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital">
             <div class="logo-separator"></div>
             <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
@@ -230,7 +257,8 @@ def setup_mantenimiento_ui(custom_logo=None):
         </div>
     </footer>
 </body>
-</html>"""
+</html>
+    """
 
     html_content = html_content.replace("{HOSPITAL_NAME}", HOSPITAL_NAME)
     html_content = html_content.replace("{LOGO_HOSP}", logo_file)
