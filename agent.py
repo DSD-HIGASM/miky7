@@ -21,7 +21,14 @@ kiosk_lock = True
 # INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO INSTITUCIONAL
 # =================================================================
 def setup_mantenimiento_ui():
-    html_path = os.path.expanduser("~/control_remoto/mantenimiento.html")
+    t_dir = os.path.expanduser("~/control_remoto")
+    os.makedirs(t_dir, exist_ok=True)
+    html_path = os.path.join(t_dir, "mantenimiento.html")
+    
+    # Rutas absolutas para evitar bloqueos de Chromium Kiosko
+    path_prov = f"file://{t_dir}/ministerio.svg"
+    path_hosp = f"file://{t_dir}/logo_hospital.jpg"
+    
     html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -208,9 +215,9 @@ def setup_mantenimiento_ui():
 
     <footer class="footer-bar">
         <div class="footer-logos">
-            <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
+            <img src="{PATH_PROV}" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
             <div class="logo-separator"></div>
-            <img src="logo_hospital.jpg" alt="{HOSPITAL_NAME}" class="logo-hospital">
+            <img src="{PATH_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital" onerror="this.style.display='none'; document.querySelector('.logo-separator').style.display='none';">
         </div>
         <div class="reconnect-status">
             <div class="spinner"></div>
@@ -221,8 +228,9 @@ def setup_mantenimiento_ui():
 </html>"""
 
     html_content = html_content.replace("{HOSPITAL_NAME}", HOSPITAL_NAME)
+    html_content = html_content.replace("{PATH_PROV}", path_prov)
+    html_content = html_content.replace("{PATH_HOSP}", path_hosp)
 
-    os.makedirs(os.path.dirname(html_path), exist_ok=True)
     with open(html_path, "w", encoding="utf-8") as f: 
         f.write(html_content)
 
@@ -452,7 +460,11 @@ def set_startup():
         url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
         
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
-    os.system(f"nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
+    
+    # REINICIO DURO: Matamos chromium y lo volvemos a abrir en lugar de solo llamar a bash
+    cmd = f"export DISPLAY=:0 && pkill chromium && sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {url} > /dev/null 2>&1 &"
+    subprocess.Popen(cmd, shell=True)
+    
     return jsonify({"status": "ok", "url": url})
 
 @app.route('/control', methods=['POST'])
@@ -471,7 +483,7 @@ def control():
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
-            cmd = f"sleep 2 && wget -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && wget -4 -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg {min_url} && sudo reboot"
+            cmd = f"sleep 2 && wget --no-check-certificate -4 -qO /tmp/new_agent.py {repo_url} && mv /tmp/new_agent.py {install_path}/agent.py && wget --no-check-certificate -4 -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg {min_url} && sudo reboot"
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
         return jsonify({"error": "Falta URL"}), 400
@@ -481,7 +493,8 @@ def control():
         if url_hosp and url_min:
             t_dir = os.path.expanduser('~/control_remoto')
             os.makedirs(t_dir, exist_ok=True)
-            cmd = f"wget -4 -qO {t_dir}/logo_hospital.jpg \"{url_hosp}\" && wget -4 -qO {t_dir}/ministerio.svg \"{url_min}\""
+            # Agregamos --no-check-certificate y -T 10 para evitar fallos de proxy hospitalario
+            cmd = f"wget --no-check-certificate -T 10 -4 -qO {t_dir}/logo_hospital.jpg \"{url_hosp}\" && wget --no-check-certificate -T 10 -4 -qO {t_dir}/ministerio.svg \"{url_min}\" && export DISPLAY=:0 && xdotool search --onlyvisible --class 'chromium' windowactivate key F5"
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "Logos actualizados"})
         return jsonify({"error": "Faltan URLs"}), 400
