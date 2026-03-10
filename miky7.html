@@ -758,9 +758,17 @@
                         online++;
                         const data = await res.json();
                         pc.mac = data.mac;
+                        pc.kiosk_lock = data.kiosk_lock;
                         if (data.leader) clusterLeader = data.leader;
                         updatePCStatus(pc.id, true, data);
                         offlineCounters[pc.id] = 0;
+
+                        // Auto-cargar screenshot la primera vez que conecta
+                        if (!pc.lastScreenshot && !pc.fetchingImg) {
+                            pc.fetchingImg = true;
+                            // Retardo aleatorio para no ahogar la red pidiendo todas las fotos a la vez
+                            setTimeout(() => takeScreenshot(pc.id), Math.random() * 4000);
+                        }
                     } else throw Error();
                 } catch (e) {
                     updatePCStatus(pc.id, false);
@@ -918,11 +926,15 @@
                 if (res.ok) {
                     const data = await res.json();
                     if (data.image) {
+                        pc.lastScreenshot = `data:image/png;base64,${data.image}`;
                         const img = document.getElementById(`img-${pcId}`);
-                        if (img) { img.src = `data:image/png;base64,${data.image}`; img.classList.replace("opacity-40", "opacity-90"); }
+                        if (img) { img.src = pc.lastScreenshot; img.classList.replace("opacity-40", "opacity-90"); }
                     }
                 }
-            } catch (e) { } finally { if (icon) icon.className = "ph-bold ph-camera-plus text-base"; }
+            } catch (e) { } finally { 
+                if (icon) icon.className = "ph-bold ph-camera-plus text-base";
+                if (pc) pc.fetchingImg = false;
+            }
         }
 
         async function fireOTA() {
@@ -957,6 +969,14 @@
             }
         }
 
+        async function toggleKioskLock(pcId, targetState) {
+            await sendCommand(pcId, 'toggle_kiosk', { state: targetState }, true);
+            const pc = db.pcs.find(p => p.id == pcId);
+            if(pc) pc.kiosk_lock = targetState;
+            updateUIGrid();
+            showToast(`Guardianes de Kiosko ${targetState ? 'ACTIVADOS' : 'PAUSADOS'} en ${pc.name}`, targetState ? "success" : "warning");
+        }
+
         function updateUIGrid() {
             const grid = document.getElementById("pc-grid"); const list = document.getElementById("pc-list-body");
             grid.innerHTML = ""; list.innerHTML = "";
@@ -979,6 +999,12 @@
                     `<button onclick="openCronModal('${pc.id}')" class="flex-1 bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 hover:text-purple-500 text-slate-500 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center gap-1 h-7" title="Horarios de Encendido"><i class="ph-bold ph-clock text-xs"></i> CRON</button>`;
 
                 let leaderCrown = pc.ip === clusterLeader ? `<i class="ph-fill ph-crown text-amber-500 ml-1 text-[14px]" title="Nodo Capitán (Gestor Telegram)"></i>` : ``;
+                
+                const isLocked = pc.kiosk_lock !== false; // Por defecto asumimos cerrado
+                let lockBtnGrid = `<button onclick="toggleKioskLock('${pc.id}', ${!isLocked})" class="w-8 h-7 ${isLocked ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500' : 'bg-amber-500/10 text-amber-600 border-amber-500/20 hover:bg-amber-500'} border hover:text-white rounded-lg flex items-center justify-center transition-colors" title="${isLocked ? 'Watchdog Activo (Click para pausar)' : 'Watchdog Pausado (Click para activar)'}"><i class="ph-bold ${isLocked ? 'ph-lock-key' : 'ph-lock-key-open'} text-sm"></i></button>`;
+
+                const imgSrc = pc.lastScreenshot || "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+                const imgOp = pc.lastScreenshot ? "opacity-90" : "opacity-40";
 
                 grid.innerHTML += `
                 <div class="bg-white dark:bg-surface-accent border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden flex flex-col shadow-sm group relative">
@@ -994,7 +1020,7 @@
                         </div>
                     </div>
                     <div class="relative bg-black h-36 flex items-center justify-center cursor-zoom-in overflow-hidden group/img" onclick="openImageModal('${pc.id}')">
-                        <img id="img-${pc.id}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="max-w-full max-h-full object-contain opacity-40">
+                        <img id="img-${pc.id}" src="${imgSrc}" class="max-w-full max-h-full object-contain ${imgOp}">
                         <span id="url-${pc.id}" class="absolute bottom-2 left-2 text-[8px] text-white/70 font-mono bg-black/60 px-2 py-1 rounded-md max-w-[90%] truncate">Conectando...</span>
                         <div class="absolute inset-0 bg-black/80 hidden flex-col items-center justify-center backdrop-blur-sm z-20" id="wol-btn-${pc.id}">
                             <button onclick="event.stopPropagation(); triggerWakeOnLan('${pc.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-lg">WAKE ON LAN</button>
@@ -1014,6 +1040,7 @@
                         </div>
                         <div class="flex justify-between gap-1">
                             ${cronBtnGrid}
+                            ${lockBtnGrid}
                             <button onclick="sendCommand('${pc.id}','startup',{url: db.maintUrl})" class="w-8 h-7 bg-orange-500/10 text-orange-600 border border-orange-500/20 hover:bg-orange-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Mantenimiento"><i class="ph-fill ph-warning text-sm"></i></button>
                             <button onclick="sendCommand('${pc.id}','reboot',{},true)" class="w-8 h-7 bg-red-500/10 text-red-600 border border-red-500/20 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Reiniciar Hard"><i class="ph-bold ph-power text-sm"></i></button>
                         </div>
@@ -1029,6 +1056,7 @@
                             <button onclick="sendCommand('${pc.id}','startup',{url: db.globalDefault},false)" class="p-1.5 bg-brand-50 dark:bg-brand-900/20 text-brand-600 rounded-md hover:bg-brand-500 hover:text-white" title="Lanzar URL Global"><i class="ph-bold ph-globe text-sm"></i></button>
                             <button onclick="askIndividualUrl('${pc.id}')" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-slate-500" title="URL Manual"><i class="ph-bold ph-link text-sm"></i></button>
                             <button onclick="openCronModal('${pc.id}')" class="p-1.5 rounded-md ${pc.cron ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-600' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:text-purple-500'}" title="Cron"><i class="ph-bold ph-clock text-sm"></i></button>
+                            <button onclick="toggleKioskLock('${pc.id}', ${!isLocked})" class="p-1.5 rounded-md ${isLocked ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 hover:bg-emerald-500 hover:text-white' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 hover:bg-amber-500 hover:text-white'}" title="${isLocked ? 'Pausar Watchdog' : 'Activar Watchdog'}"><i class="ph-bold ${isLocked ? 'ph-lock-key' : 'ph-lock-key-open'} text-sm"></i></button>
                             <button onclick="sendCommand('${pc.id}','reboot',{},true)" class="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md hover:text-red-500"><i class="ph-bold ph-power text-sm"></i></button>
                         </div>
                     </td>
