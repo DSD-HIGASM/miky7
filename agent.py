@@ -22,10 +22,11 @@ kiosk_lock = True
 # =================================================================
 def get_existing_logo_name():
     t_dir = os.path.expanduser('~/control_remoto')
+    # Busca dinámicamente qué formato existe en la máquina
     for ext in ['png', 'jpg', 'jpeg', 'svg', 'gif', 'webp']:
         if os.path.exists(os.path.join(t_dir, f"logo_hospital.{ext}")):
             return f"logo_hospital.{ext}"
-    return "logo_hospital.jpg"
+    return "logo_hospital.png" # Fallback inicial
 
 def setup_mantenimiento_ui(custom_logo=None):
     t_dir = os.path.expanduser("~/control_remoto")
@@ -470,7 +471,6 @@ def set_startup():
         
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
     
-    # MATANZA DEFINITIVA: Cierra todo rastro de Chromium con killall -9 antes de iniciar
     os.system(f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
     
     return jsonify({"status": "ok", "url": url})
@@ -492,7 +492,7 @@ def control():
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
             
-            cmd = f"sleep 2 && wget -qO /tmp/new_agent.py \"{repo_url}\" && mv /tmp/new_agent.py {install_path}/agent.py && wget -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg \"{min_url}\" && sudo reboot"
+            cmd = f"sleep 2 && wget --no-check-certificate -qO /tmp/new_agent.py '{repo_url}' && mv /tmp/new_agent.py {install_path}/agent.py && wget --no-check-certificate -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg '{min_url}' && sudo reboot"
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
         return jsonify({"error": "Falta URL"}), 400
@@ -505,30 +505,28 @@ def control():
                 t_dir = os.path.expanduser('~/control_remoto')
                 os.makedirs(t_dir, exist_ok=True)
                 
-                # EXTRACTOR NATIVO DE EXTENSIONES (Para que soporte png, jpg, jpeg, svg, webp)
-                ext = "jpg"
+                # EXTRACTOR DE FORMATO (Asume PNG por defecto si la URL no dice nada, ideal para logos)
+                ext = "png"
                 u_lower = url_hosp.lower()
-                if ".png" in u_lower: ext = "png"
+                if ".jpg" in u_lower or ".jpeg" in u_lower: ext = "jpg"
                 elif ".svg" in u_lower: ext = "svg"
                 elif ".gif" in u_lower: ext = "gif"
                 elif ".webp" in u_lower: ext = "webp"
-                elif ".jpeg" in u_lower: ext = "jpeg"
                 
                 logo_name = f"logo_hospital.{ext}"
                 
-                # Borra logos viejos para evitar conflictos
+                # Limpia los viejos y descarga con WGET RAW y comillas simples
                 os.system(f"rm -f {t_dir}/logo_hospital.*")
                 
-                # WGET LIMPIO (Mismo método que el install.sh)
-                subprocess.run(f"wget -qO {t_dir}/{logo_name} \"{url_hosp}\"", shell=True)
-                subprocess.run(f"wget -qO {t_dir}/ministerio.svg \"{url_min}\"", shell=True)
+                subprocess.run(f"wget --no-check-certificate -qO {t_dir}/{logo_name} '{url_hosp}'", shell=True)
+                subprocess.run(f"wget --no-check-certificate -qO {t_dir}/ministerio.svg '{url_min}'", shell=True)
                 
-                # Reconstruye el HTML con el nombre exacto de la extensión y actualiza
+                # Reconstruye el HTML y le pega un F5 al Chromium
                 setup_mantenimiento_ui(custom_logo=logo_name)
                 run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
 
             threading.Thread(target=download_logos).start()
-            return jsonify({"status": "ok", "msg": "Logos descargando y procesando..."})
+            return jsonify({"status": "ok", "msg": "Logos actualizados"})
         return jsonify({"error": "Faltan URLs"}), 400
         
     elif acc == 'wol':
