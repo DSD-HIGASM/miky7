@@ -220,9 +220,9 @@ def setup_mantenimiento_ui(custom_logo=None):
 
     <footer class="footer-bar">
         <div class="footer-logos">
-            <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
-            <div class="logo-separator"></div>
             <img src="{LOGO_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital">
+            <div class="logo-separator"></div>
+            <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
         </div>
         <div class="reconnect-status">
             <div class="spinner"></div>
