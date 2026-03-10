@@ -239,11 +239,17 @@ CACHE_DIR = os.path.expanduser("~/.config/chromium-kiosko-hsi/Default/Cache/*")
 DB_FILE = os.path.expanduser("~/miki_db.json")
 
 def load_db():
+    default_db = {"pcs": [], "tgToken": "", "tgChat": "", "sectors": [], "globalDefault": "", "maintUrl": "local"}
     if os.path.exists(DB_FILE):
         try:
-            with open(DB_FILE, 'r') as f: return json.load(f)
+            with open(DB_FILE, 'r') as f: 
+                data = json.load(f)
+                # Blindaje si la url quedó vacía por un guardado anterior
+                if not data.get("maintUrl"):
+                    data["maintUrl"] = "local"
+                return data
         except: pass
-    return {"pcs": [], "tgToken": "", "tgChat": "", "sectors": [], "globalDefault": ""}
+    return default_db
 
 def save_db(data):
     try:
@@ -290,11 +296,11 @@ def watchdog_hsi():
 
         if current_status_down and not hsi_is_down:
             hsi_is_down = True
-            cmd = f"export DISPLAY=:0 && pkill chromium && sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
+            cmd = f"export DISPLAY=:0 && killall chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
             subprocess.Popen(cmd, shell=True)
         elif not current_status_down and hsi_is_down:
             hsi_is_down = False
-            subprocess.Popen(f"export DISPLAY=:0 && pkill chromium && sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+            subprocess.Popen(f"export DISPLAY=:0 && killall chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
 
 def watchdog_browser():
     global kiosk_lock
@@ -448,13 +454,14 @@ def set_startup():
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     url = request.json.get('url')
     
-    if url == "local":
+    # BLINDAJE: Si la URL viene vacía, fuerza la local para que Chromium no abra una Nueva Pestaña
+    if not url or str(url).strip() == "" or url == "local":
         url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
         
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
     
-    # CORRECCIÓN DE "NUEVA PESTAÑA": Matar a Chromium antes de lanzarlo para que arranque limpio
-    os.system(f"export DISPLAY=:0 && pkill chromium && sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
+    # CIERRE SEGURO: Mata cualquier proceso de chromium activo antes de relanzar
+    os.system(f"export DISPLAY=:0 && killall chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
     
     return jsonify({"status": "ok", "url": url})
 
@@ -475,7 +482,6 @@ def control():
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
             
-            # CORRECCIÓN WGET: Usamos --no-check-certificate para que GitHub y otras URLs HTTPS no rechacen la conexión
             cmd = f"sleep 2 && wget --no-check-certificate -qO /tmp/new_agent.py \"{repo_url}\" && mv /tmp/new_agent.py {install_path}/agent.py && wget --no-check-certificate -qO {os.path.expanduser('~/control_remoto')}/ministerio.svg \"{min_url}\" && sudo reboot"
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
@@ -485,28 +491,17 @@ def control():
         url_hosp = request.json.get('url_hospital')
         url_min = request.json.get('url_ministerio')
         if url_hosp and url_min:
-            # CORRECCIÓN DE DESCARGA DE LOGOS: Usamos el motor nativo de Python para que nunca falle por certificados o permisos
             def download_logos():
                 t_dir = os.path.expanduser('~/control_remoto')
                 os.makedirs(t_dir, exist_ok=True)
-                import ssl
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
                 
-                try:
-                    req_h = urllib.request.Request(url_hosp, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req_h, context=ctx, timeout=15) as r, open(f"{t_dir}/logo_hospital.jpg", 'wb') as f:
-                        f.write(r.read())
-                except Exception as e: logging.error(f"Error descargando logo hospital: {e}")
+                # BLINDAJE DE DESCARGA: Wget disfrazado de navegador real para evitar el error 403 Forbidden
+                cmd1 = f"wget --no-check-certificate -U 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -qO {t_dir}/logo_hospital.jpg \"{url_hosp}\""
+                cmd2 = f"wget --no-check-certificate -U 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -qO {t_dir}/ministerio.svg \"{url_min}\""
                 
-                try:
-                    req_m = urllib.request.Request(url_min, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req_m, context=ctx, timeout=15) as r, open(f"{t_dir}/ministerio.svg", 'wb') as f:
-                        f.write(r.read())
-                except Exception as e: logging.error(f"Error descargando SVG ministerio: {e}")
+                subprocess.run(cmd1, shell=True)
+                subprocess.run(cmd2, shell=True)
                 
-                # Forzamos recarga de pantalla (F5) para que Chromium olvide la caché y muestre los nuevos logos
                 run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
 
             threading.Thread(target=download_logos).start()
