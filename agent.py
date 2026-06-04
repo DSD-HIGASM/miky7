@@ -34,16 +34,13 @@ def setup_mantenimiento_ui(custom_logo=None):
     logo_file = custom_logo if custom_logo else get_existing_logo_name()
     html_path = os.path.join(t_dir, "mantenimiento.html")
     
+    # HTML 100% OFFLINE (Sin Google Fonts para carga instantánea sin red)
     html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Atención en Curso - {HOSPITAL_NAME}</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 
     <style>
         :root {
@@ -62,7 +59,7 @@ def setup_mantenimiento_ui(custom_logo=None):
             margin: 0; padding: 0; 
             height: 100vh; width: 100vw;
             background-color: var(--bg-main);
-            font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             overflow: hidden; 
             display: flex; flex-direction: column;
         }
@@ -247,7 +244,6 @@ except Exception as e:
 # BASE DE DATOS Y RED
 # =================================================================
 STARTUP_URL_FILE = os.path.expanduser("~/kiosko_startup.url")
-RESOLUTION_FILE = os.path.expanduser("~/kiosko_resolution.txt")
 CACHE_DIR = os.path.expanduser("~/.config/chromium-kiosko-hsi/Default/Cache/*")
 DB_FILE = os.path.expanduser("~/miki_db.json")
 
@@ -277,9 +273,12 @@ def get_local_ip():
     finally: s.close()
     return ip
 
-# =================================================================
-# APLICACIÓN DE RESOLUCIÓN PERSISTENTE (AL INICIO)
-# =================================================================
+def get_mac():
+    try:
+        mac_num = hex(uuid.getnode()).replace('0x', '').upper()
+        return ':'.join(mac_num.zfill(12)[i: i + 2] for i in range(0, 11, 2))
+    except: return "00:00:00:00:00:00"
+
 def run_cmd(cmd):
     try:
         uid = os.getuid()
@@ -288,16 +287,23 @@ def run_cmd(cmd):
         return True
     except: return False
 
+# =================================================================
+# APLICACIÓN DE RESOLUCIÓN PERSISTENTE (JSON-DRIVEN)
+# =================================================================
 def apply_saved_resolution():
-    time.sleep(5) 
-    if os.path.exists(RESOLUTION_FILE):
-        try:
-            with open(RESOLUTION_FILE, 'r') as f:
-                res = f.read().strip()
-            if res and res != "auto":
-                run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --mode {res}")
-        except Exception as e:
-            logging.error(f"Error al aplicar resolucion: {e}")
+    time.sleep(5) # Esperamos que inicie el servidor X
+    db = load_db()
+    my_mac = get_mac()
+    my_ip = get_local_ip()
+    
+    res = "auto"
+    for pc in db.get("pcs", []):
+        if pc.get("mac") == my_mac or pc.get("ip") == my_ip:
+            res = pc.get("resolution", "auto")
+            break
+            
+    if res and res != "auto":
+        run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --mode {res}")
 
 threading.Thread(target=apply_saved_resolution, daemon=True).start()
 
@@ -332,7 +338,8 @@ def watchdog_hsi():
 
         if current_status_down and not hsi_is_down:
             hsi_is_down = True
-            cmd = f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
+            # CORRECCIÓN: Comando chromium explícito igual al del script .sh
+            cmd = f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
             subprocess.Popen(cmd, shell=True)
         elif not current_status_down and hsi_is_down:
             hsi_is_down = False
@@ -432,12 +439,6 @@ def verificar_auth(req):
     if token and "Bearer" in token: return token.split(" ")[1] == BACKEND_TOKEN
     return False
 
-def get_mac():
-    try:
-        mac_num = hex(uuid.getnode()).replace('0x', '').upper()
-        return ':'.join(mac_num.zfill(12)[i: i + 2] for i in range(0, 11, 2))
-    except: return "00:00:00:00:00:00"
-
 def send_wol(macaddress):
     try:
         data = bytes.fromhex('FF' * 6 + macaddress.replace(':', '').replace('-', '') * 16)
@@ -507,6 +508,7 @@ def control():
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
+            
             cmd = f'sleep 2 && wget -4 -qO /tmp/new_agent.py "{repo_url}" && mv /tmp/new_agent.py {install_path}/agent.py && wget -4 -qO {os.path.expanduser("~/control_remoto")}/ministerio.svg "{min_url}" && sudo reboot'
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
@@ -542,10 +544,8 @@ def control():
         
     elif acc == 'set_resolution':
         res = request.json.get('resolution', 'auto')
+        # La persistencia se maneja desde el panel HTML al sincronizar el JSON
         try:
-            with open(RESOLUTION_FILE, 'w') as f: 
-                f.write(res)
-            
             if res != "auto":
                 run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --mode {res}")
             else:
