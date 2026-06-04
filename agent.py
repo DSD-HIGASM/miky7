@@ -25,7 +25,7 @@ def get_existing_logo_name():
     for ext in ['png', 'jpg', 'jpeg', 'svg', 'gif', 'webp']:
         if os.path.exists(os.path.join(t_dir, f"logo_hospital.{ext}")):
             return f"logo_hospital.{ext}"
-    return "logo_hospital.jpg"
+    return "logo_hospital.png"
 
 def setup_mantenimiento_ui(custom_logo=None):
     t_dir = os.path.expanduser("~/control_remoto")
@@ -220,9 +220,9 @@ def setup_mantenimiento_ui(custom_logo=None):
 
     <footer class="footer-bar">
         <div class="footer-logos">
-            <img src="{LOGO_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital">
-            <div class="logo-separator"></div>
             <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
+            <div class="logo-separator"></div>
+            <img src="{LOGO_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital">
         </div>
         <div class="reconnect-status">
             <div class="spinner"></div>
@@ -247,6 +247,7 @@ except Exception as e:
 # BASE DE DATOS Y RED
 # =================================================================
 STARTUP_URL_FILE = os.path.expanduser("~/kiosko_startup.url")
+RESOLUTION_FILE = os.path.expanduser("~/kiosko_resolution.txt")
 CACHE_DIR = os.path.expanduser("~/.config/chromium-kiosko-hsi/Default/Cache/*")
 DB_FILE = os.path.expanduser("~/miki_db.json")
 
@@ -275,6 +276,30 @@ def get_local_ip():
     except: ip = '127.0.0.1'
     finally: s.close()
     return ip
+
+# =================================================================
+# APLICACIÓN DE RESOLUCIÓN PERSISTENTE (AL INICIO)
+# =================================================================
+def run_cmd(cmd):
+    try:
+        uid = os.getuid()
+        full_cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && {cmd}"
+        subprocess.run(full_cmd, shell=True, check=True)
+        return True
+    except: return False
+
+def apply_saved_resolution():
+    time.sleep(5) 
+    if os.path.exists(RESOLUTION_FILE):
+        try:
+            with open(RESOLUTION_FILE, 'r') as f:
+                res = f.read().strip()
+            if res and res != "auto":
+                run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --mode {res}")
+        except Exception as e:
+            logging.error(f"Error al aplicar resolucion: {e}")
+
+threading.Thread(target=apply_saved_resolution, daemon=True).start()
 
 # =================================================================
 # WATCHDOG DE RED (Failover HSI) Y DE PROCESO
@@ -407,14 +432,6 @@ def verificar_auth(req):
     if token and "Bearer" in token: return token.split(" ")[1] == BACKEND_TOKEN
     return False
 
-def run_cmd(cmd):
-    try:
-        uid = os.getuid()
-        full_cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && {cmd}"
-        subprocess.run(full_cmd, shell=True, check=True)
-        return True
-    except: return False
-
 def get_mac():
     try:
         mac_num = hex(uuid.getnode()).replace('0x', '').upper()
@@ -490,8 +507,6 @@ def control():
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
-            
-            # IGUAL QUE EL INSTALL.SH: IPv4 forzado y comillas dobles
             cmd = f'sleep 2 && wget -4 -qO /tmp/new_agent.py "{repo_url}" && mv /tmp/new_agent.py {install_path}/agent.py && wget -4 -qO {os.path.expanduser("~/control_remoto")}/ministerio.svg "{min_url}" && sudo reboot'
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
@@ -504,8 +519,6 @@ def control():
             def download_logos():
                 t_dir = os.path.expanduser('~/control_remoto')
                 os.makedirs(t_dir, exist_ok=True)
-                
-                # Sigue detectando el formato dinámicamente de la URL
                 ext = "jpg"
                 u_lower = url_hosp.lower()
                 if ".png" in u_lower: ext = "png"
@@ -515,15 +528,11 @@ def control():
                 elif ".jpeg" in u_lower: ext = "jpeg"
                 
                 logo_name = f"logo_hospital.{ext}"
-                
-                # Limpia los viejos
                 os.system(f"rm -f {t_dir}/logo_hospital.*")
                 
-                # EXACTAMENTE LA MISMA SINTAXIS DEL INSTALL.SH (-4 y comillas dobles)
                 subprocess.run(f'wget -4 -qO {t_dir}/{logo_name} "{url_hosp}"', shell=True)
                 subprocess.run(f'wget -4 -qO {t_dir}/ministerio.svg "{url_min}"', shell=True)
                 
-                # Reconstruye el HTML con el nombre exacto y F5
                 setup_mantenimiento_ui(custom_logo=logo_name)
                 run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
 
@@ -531,6 +540,22 @@ def control():
             return jsonify({"status": "ok", "msg": "Logos actualizados"})
         return jsonify({"error": "Faltan URLs"}), 400
         
+    elif acc == 'set_resolution':
+        res = request.json.get('resolution', 'auto')
+        try:
+            with open(RESOLUTION_FILE, 'w') as f: 
+                f.write(res)
+            
+            if res != "auto":
+                run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --mode {res}")
+            else:
+                run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --auto")
+            
+            return jsonify({"status": "ok", "msg": f"Resolucion aplicada"})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    elif acc == 'reset_hdmi': run_cmd("xrandr --auto")
     elif acc == 'wol':
         target_mac = request.json.get('mac')
         if target_mac: send_wol(target_mac)
