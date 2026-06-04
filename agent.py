@@ -16,6 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # VARIABLES DE ESTADO LOCAL
 # =================================================================
 kiosk_lock = True
+hsi_is_down = False # Variable global compartida entre guardianes
 
 # =================================================================
 # INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO INSTITUCIONAL
@@ -34,13 +35,16 @@ def setup_mantenimiento_ui(custom_logo=None):
     logo_file = custom_logo if custom_logo else get_existing_logo_name()
     html_path = os.path.join(t_dir, "mantenimiento.html")
     
-    # HTML 100% OFFLINE (Sin Google Fonts para carga instantánea sin red)
     html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Atención en Curso - {HOSPITAL_NAME}</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 
     <style>
         :root {
@@ -59,7 +63,7 @@ def setup_mantenimiento_ui(custom_logo=None):
             margin: 0; padding: 0; 
             height: 100vh; width: 100vw;
             background-color: var(--bg-main);
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Roboto', system-ui, -apple-system, sans-serif;
             overflow: hidden; 
             display: flex; flex-direction: column;
         }
@@ -244,6 +248,7 @@ except Exception as e:
 # BASE DE DATOS Y RED
 # =================================================================
 STARTUP_URL_FILE = os.path.expanduser("~/kiosko_startup.url")
+RESOLUTION_FILE = os.path.expanduser("~/kiosko_resolution.txt")
 CACHE_DIR = os.path.expanduser("~/.config/chromium-kiosko-hsi/Default/Cache/*")
 DB_FILE = os.path.expanduser("~/miki_db.json")
 
@@ -291,7 +296,7 @@ def run_cmd(cmd):
 # APLICACIÓN DE RESOLUCIÓN PERSISTENTE (JSON-DRIVEN)
 # =================================================================
 def apply_saved_resolution():
-    time.sleep(5) # Esperamos que inicie el servidor X
+    time.sleep(5) 
     db = load_db()
     my_mac = get_mac()
     my_ip = get_local_ip()
@@ -310,8 +315,6 @@ threading.Thread(target=apply_saved_resolution, daemon=True).start()
 # =================================================================
 # WATCHDOG DE RED (Failover HSI) Y DE PROCESO
 # =================================================================
-hsi_is_down = False
-
 def watchdog_hsi():
     global hsi_is_down, kiosk_lock
     maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
@@ -326,27 +329,32 @@ def watchdog_hsi():
         except: continue
             
         if "mantenimiento.html" in target_url or not target_url.startswith("http"): continue
+        
         current_status_down = False
         try:
-            req = urllib.request.Request(target_url, headers={'User-Agent': 'Miky/Failover'})
-            with urllib.request.urlopen(req, timeout=7) as response:
-                if response.status >= 500: current_status_down = True
-        except HTTPError as e:
-            if e.code >= 500: current_status_down = True
-        except URLError: current_status_down = True
-        except Exception: current_status_down = True
+            # BLINDAJE RED: curl es inmune a congelamientos de DNS, tiene timeout duro de 7 segs.
+            output = subprocess.check_output(f"curl -k -s -o /dev/null -w '%{{http_code}}' -m 7 \"{target_url}\"", shell=True).decode().strip()
+            if not output or int(output) == 0 or int(output) >= 500:
+                current_status_down = True
+        except:
+            current_status_down = True
 
         if current_status_down and not hsi_is_down:
             hsi_is_down = True
-            # CORRECCIÓN: Comando chromium explícito igual al del script .sh
-            cmd = f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
-            subprocess.Popen(cmd, shell=True)
+            uid = os.getuid()
+            # BLINDAJE ENTORNO: Se le inyecta XDG_RUNTIME_DIR al igual que en manual
+            cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && (chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required '{maint_url}' > /dev/null 2>&1 & || chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required '{maint_url}' > /dev/null 2>&1 &)"
+            os.system(cmd)
         elif not current_status_down and hsi_is_down:
             hsi_is_down = False
-            subprocess.Popen(f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+            uid = os.getuid()
+            cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &"
+            os.system(cmd)
 
 def watchdog_browser():
-    global kiosk_lock
+    global kiosk_lock, hsi_is_down
+    maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
+    
     while True:
         time.sleep(10)
         if not kiosk_lock: continue 
@@ -354,8 +362,14 @@ def watchdog_browser():
         try:
             browser_alive = any("chromium" in p.name().lower() for p in psutil.process_iter(['name']))
             if not browser_alive:
-                sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
-                subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+                uid = os.getuid()
+                # BLINDAJE MULTI-HILO: Si Chrome crashea mientras no hay internet, abre el mantenimiento, no el dinosaurio.
+                if hsi_is_down:
+                    cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && (chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required '{maint_url}' > /dev/null 2>&1 & || chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required '{maint_url}' > /dev/null 2>&1 &)"
+                else:
+                    sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
+                    cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && nohup bash {sh_path} > /dev/null 2>&1 &"
+                os.system(cmd)
         except: pass
 
 threading.Thread(target=watchdog_hsi, daemon=True).start()
@@ -488,7 +502,8 @@ def set_startup():
         
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
     
-    os.system(f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
+    uid = os.getuid()
+    os.system(f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
     
     return jsonify({"status": "ok", "url": url})
 
@@ -544,7 +559,6 @@ def control():
         
     elif acc == 'set_resolution':
         res = request.json.get('resolution', 'auto')
-        # La persistencia se maneja desde el panel HTML al sincronizar el JSON
         try:
             if res != "auto":
                 run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --mode {res}")
