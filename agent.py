@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # VARIABLES DE ESTADO LOCAL
 # =================================================================
 kiosk_lock = True
-hsi_is_down = False # Variable global compartida entre guardianes
+hsi_is_down = False 
 
 # =================================================================
 # INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO INSTITUCIONAL
@@ -293,7 +293,7 @@ def run_cmd(cmd):
     except: return False
 
 # =================================================================
-# APLICACIÓN DE RESOLUCIÓN PERSISTENTE (JSON-DRIVEN)
+# APLICACIÓN DE RESOLUCIÓN PERSISTENTE (CON CVT PARA VM)
 # =================================================================
 def apply_saved_resolution():
     time.sleep(5) 
@@ -307,8 +307,17 @@ def apply_saved_resolution():
             res = pc.get("resolution", "auto")
             break
             
-    if res and res != "auto":
-        run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --mode {res}")
+    if res and res != "auto" and "x" in res:
+        w, h = res.split("x")
+        # Script Bash empaquetado para generar la resolución si no existe
+        cmd = (
+            f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1); "
+            f"modeline=$(cvt {w} {h} 60 | grep Modeline | cut -d' ' -f3-); "
+            f"xrandr --newmode '{res}' $modeline 2>/dev/null; "
+            f"xrandr --addmode $disp '{res}' 2>/dev/null; "
+            f"xrandr --output $disp --mode '{res}'"
+        )
+        run_cmd(cmd)
 
 threading.Thread(target=apply_saved_resolution, daemon=True).start()
 
@@ -332,7 +341,6 @@ def watchdog_hsi():
         
         current_status_down = False
         try:
-            # BLINDAJE RED: curl es inmune a congelamientos de DNS, tiene timeout duro de 7 segs.
             output = subprocess.check_output(f"curl -k -s -o /dev/null -w '%{{http_code}}' -m 7 \"{target_url}\"", shell=True).decode().strip()
             if not output or int(output) == 0 or int(output) >= 500:
                 current_status_down = True
@@ -342,9 +350,9 @@ def watchdog_hsi():
         if current_status_down and not hsi_is_down:
             hsi_is_down = True
             uid = os.getuid()
-            # BLINDAJE ENTORNO: Se le inyecta XDG_RUNTIME_DIR al igual que en manual
-            cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && (chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required '{maint_url}' > /dev/null 2>&1 & || chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required '{maint_url}' > /dev/null 2>&1 &)"
+            cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash -c 'chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required \"{maint_url}\" || chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required \"{maint_url}\"' > /dev/null 2>&1 &"
             os.system(cmd)
+            
         elif not current_status_down and hsi_is_down:
             hsi_is_down = False
             uid = os.getuid()
@@ -363,9 +371,8 @@ def watchdog_browser():
             browser_alive = any("chromium" in p.name().lower() for p in psutil.process_iter(['name']))
             if not browser_alive:
                 uid = os.getuid()
-                # BLINDAJE MULTI-HILO: Si Chrome crashea mientras no hay internet, abre el mantenimiento, no el dinosaurio.
                 if hsi_is_down:
-                    cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && (chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required '{maint_url}' > /dev/null 2>&1 & || chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required '{maint_url}' > /dev/null 2>&1 &)"
+                    cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && nohup bash -c 'chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required \"{maint_url}\" || chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required \"{maint_url}\"' > /dev/null 2>&1 &"
                 else:
                     sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
                     cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && nohup bash {sh_path} > /dev/null 2>&1 &"
@@ -512,9 +519,13 @@ def control():
     global kiosk_lock
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     acc = request.json.get('accion')
-    if acc == 'refresh': run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
-    elif acc == 'clear_cache': run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
-    elif acc == 'reboot': os.system("sudo reboot")
+    
+    if acc == 'refresh': 
+        run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+    elif acc == 'clear_cache': 
+        run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+    elif acc == 'reboot': 
+        os.system("sudo reboot")
     elif acc == 'toggle_kiosk': 
         kiosk_lock = request.json.get('state', True)
         return jsonify({"status": "ok", "kiosk_lock": kiosk_lock})
@@ -523,7 +534,6 @@ def control():
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
-            
             cmd = f'sleep 2 && wget -4 -qO /tmp/new_agent.py "{repo_url}" && mv /tmp/new_agent.py {install_path}/agent.py && wget -4 -qO {os.path.expanduser("~/control_remoto")}/ministerio.svg "{min_url}" && sudo reboot'
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
@@ -560,10 +570,19 @@ def control():
     elif acc == 'set_resolution':
         res = request.json.get('resolution', 'auto')
         try:
-            if res != "auto":
-                run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --mode {res}")
+            if res != "auto" and "x" in res:
+                w, h = res.split("x")
+                # Generamos el modeline y forzamos la resolución con cvt + xrandr (Ideal para VMs)
+                cmd = (
+                    f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1); "
+                    f"modeline=$(cvt {w} {h} 60 | grep Modeline | cut -d' ' -f3-); "
+                    f"xrandr --newmode '{res}' $modeline 2>/dev/null; "
+                    f"xrandr --addmode $disp '{res}' 2>/dev/null; "
+                    f"xrandr --output $disp --mode '{res}'"
+                )
+                run_cmd(cmd)
             else:
-                run_cmd(f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --auto")
+                run_cmd("disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --auto")
             
             return jsonify({"status": "ok", "msg": f"Resolucion aplicada"})
         except Exception as e:
