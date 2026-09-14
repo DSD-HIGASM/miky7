@@ -16,6 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # VARIABLES DE ESTADO LOCAL
 # =================================================================
 kiosk_lock = True
+hsi_is_down = False 
 
 # =================================================================
 # INYECCIÓN AUTOMÁTICA OTA: PANTALLA MANTENIMIENTO INSTITUCIONAL
@@ -25,7 +26,7 @@ def get_existing_logo_name():
     for ext in ['png', 'jpg', 'jpeg', 'svg', 'gif', 'webp']:
         if os.path.exists(os.path.join(t_dir, f"logo_hospital.{ext}")):
             return f"logo_hospital.{ext}"
-    return "logo_hospital.jpg"
+    return "logo_hospital.png"
 
 def setup_mantenimiento_ui(custom_logo=None):
     t_dir = os.path.expanduser("~/control_remoto")
@@ -246,16 +247,16 @@ def setup_mantenimiento_ui(custom_logo=None):
 
     <footer class="footer-bar">
         <div class="footer-logos">
-
-            <img src="{LOGO_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital">
-            <div class="logo-separator"></div>
             <img src="ministerio.svg" alt="Ministerio de Salud PBA" class="logo-provincia" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiPjx0ZXh0IHk9IjQwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzQxNzA5OSIgZm9udC13ZWlnaHQ9ImJvbGQiPk1JTklTVEVSSU8gREUgU0FMVUQ8L3RleHQ+PC9zdmc+'">
+            <div class="logo-separator"></div>
+            <img src="{LOGO_HOSP}" alt="{HOSPITAL_NAME}" class="logo-hospital">
         </div>
         <div class="reconnect-status">
             <div class="spinner"></div>
             <span>Restableciendo sistema visual...</span>
         </div>
     </footer>
+
 </body>
 </html>
     """
@@ -275,6 +276,7 @@ except Exception as e:
 # BASE DE DATOS Y RED
 # =================================================================
 STARTUP_URL_FILE = os.path.expanduser("~/kiosko_startup.url")
+RESOLUTION_FILE = os.path.expanduser("~/kiosko_resolution.txt")
 CACHE_DIR = os.path.expanduser("~/.config/chromium-kiosko-hsi/Default/Cache/*")
 DB_FILE = os.path.expanduser("~/miki_db.json")
 
@@ -304,11 +306,52 @@ def get_local_ip():
     finally: s.close()
     return ip
 
+def get_mac():
+    try:
+        mac_num = hex(uuid.getnode()).replace('0x', '').upper()
+        return ':'.join(mac_num.zfill(12)[i: i + 2] for i in range(0, 11, 2))
+    except: return "00:00:00:00:00:00"
+
+def run_cmd(cmd):
+    try:
+        uid = os.getuid()
+        full_cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && {cmd}"
+        subprocess.run(full_cmd, shell=True, check=True)
+        return True
+    except: return False
+
+# =================================================================
+# APLICACIÓN DE RESOLUCIÓN PERSISTENTE (CON CVT PARA VM)
+# =================================================================
+def apply_saved_resolution():
+    time.sleep(5) 
+    db = load_db()
+    my_mac = get_mac()
+    my_ip = get_local_ip()
+    
+    res = "auto"
+    for pc in db.get("pcs", []):
+        if pc.get("mac") == my_mac or pc.get("ip") == my_ip:
+            res = pc.get("resolution", "auto")
+            break
+            
+    if res and res != "auto" and "x" in res:
+        w, h = res.split("x")
+        # Script Bash empaquetado para generar la resolución si no existe
+        cmd = (
+            f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1); "
+            f"modeline=$(cvt {w} {h} 60 | grep Modeline | cut -d' ' -f3-); "
+            f"xrandr --newmode '{res}' $modeline 2>/dev/null; "
+            f"xrandr --addmode $disp '{res}' 2>/dev/null; "
+            f"xrandr --output $disp --mode '{res}'"
+        )
+        run_cmd(cmd)
+
+threading.Thread(target=apply_saved_resolution, daemon=True).start()
+
 # =================================================================
 # WATCHDOG DE RED (Failover HSI) Y DE PROCESO
 # =================================================================
-hsi_is_down = False
-
 def watchdog_hsi():
     global hsi_is_down, kiosk_lock
     maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
@@ -323,26 +366,31 @@ def watchdog_hsi():
         except: continue
             
         if "mantenimiento.html" in target_url or not target_url.startswith("http"): continue
+        
         current_status_down = False
         try:
-            req = urllib.request.Request(target_url, headers={'User-Agent': 'Miky/Failover'})
-            with urllib.request.urlopen(req, timeout=7) as response:
-                if response.status >= 500: current_status_down = True
-        except HTTPError as e:
-            if e.code >= 500: current_status_down = True
-        except URLError: current_status_down = True
-        except Exception: current_status_down = True
+            output = subprocess.check_output(f"curl -k -s -o /dev/null -w '%{{http_code}}' -m 7 \"{target_url}\"", shell=True).decode().strip()
+            if not output or int(output) == 0 or int(output) >= 500:
+                current_status_down = True
+        except:
+            current_status_down = True
 
         if current_status_down and not hsi_is_down:
             hsi_is_down = True
-            cmd = f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required {maint_url} > /dev/null 2>&1 &"
-            subprocess.Popen(cmd, shell=True)
+            uid = os.getuid()
+            cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash -c 'chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required \"{maint_url}\" || chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required \"{maint_url}\"' > /dev/null 2>&1 &"
+            os.system(cmd)
+            
         elif not current_status_down and hsi_is_down:
             hsi_is_down = False
-            subprocess.Popen(f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+            uid = os.getuid()
+            cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {sh_path} > /dev/null 2>&1 &"
+            os.system(cmd)
 
 def watchdog_browser():
-    global kiosk_lock
+    global kiosk_lock, hsi_is_down
+    maint_url = f"file://{os.path.expanduser('~/control_remoto/mantenimiento.html')}"
+    
     while True:
         time.sleep(10)
         if not kiosk_lock: continue 
@@ -350,8 +398,13 @@ def watchdog_browser():
         try:
             browser_alive = any("chromium" in p.name().lower() for p in psutil.process_iter(['name']))
             if not browser_alive:
-                sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
-                subprocess.Popen(f"export DISPLAY=:0 && nohup bash {sh_path} > /dev/null 2>&1 &", shell=True)
+                uid = os.getuid()
+                if hsi_is_down:
+                    cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && nohup bash -c 'chromium --kiosk --no-first-run --autoplay-policy=no-user-gesture-required \"{maint_url}\" || chromium-browser --kiosk --no-first-run --autoplay-policy=no-user-gesture-required \"{maint_url}\"' > /dev/null 2>&1 &"
+                else:
+                    sh_path = os.path.expanduser('~/iniciar_kiosko.sh')
+                    cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && nohup bash {sh_path} > /dev/null 2>&1 &"
+                os.system(cmd)
         except: pass
 
 threading.Thread(target=watchdog_hsi, daemon=True).start()
@@ -435,20 +488,6 @@ def verificar_auth(req):
     if token and "Bearer" in token: return token.split(" ")[1] == BACKEND_TOKEN
     return False
 
-def run_cmd(cmd):
-    try:
-        uid = os.getuid()
-        full_cmd = f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && {cmd}"
-        subprocess.run(full_cmd, shell=True, check=True)
-        return True
-    except: return False
-
-def get_mac():
-    try:
-        mac_num = hex(uuid.getnode()).replace('0x', '').upper()
-        return ':'.join(mac_num.zfill(12)[i: i + 2] for i in range(0, 11, 2))
-    except: return "00:00:00:00:00:00"
-
 def send_wol(macaddress):
     try:
         data = bytes.fromhex('FF' * 6 + macaddress.replace(':', '').replace('-', '') * 16)
@@ -498,7 +537,8 @@ def set_startup():
         
     with open(STARTUP_URL_FILE, 'w') as f: f.write(url)
     
-    os.system(f"export DISPLAY=:0 && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
+    uid = os.getuid()
+    os.system(f"export DISPLAY=:0 && export XDG_RUNTIME_DIR=/run/user/{uid} && killall -9 chromium-browser chromium 2>/dev/null; pkill -f chromium 2>/dev/null; sleep 2 && nohup bash {os.path.expanduser('~/iniciar_kiosko.sh')} > /dev/null 2>&1 &")
     
     return jsonify({"status": "ok", "url": url})
 
@@ -507,9 +547,13 @@ def control():
     global kiosk_lock
     if not verificar_auth(request): return jsonify({"error": "Auth"}), 401
     acc = request.json.get('accion')
-    if acc == 'refresh': run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
-    elif acc == 'clear_cache': run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
-    elif acc == 'reboot': os.system("sudo reboot")
+    
+    if acc == 'refresh': 
+        run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+    elif acc == 'clear_cache': 
+        run_cmd(f"rm -rf {CACHE_DIR} && xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
+    elif acc == 'reboot': 
+        os.system("sudo reboot")
     elif acc == 'toggle_kiosk': 
         kiosk_lock = request.json.get('state', True)
         return jsonify({"status": "ok", "kiosk_lock": kiosk_lock})
@@ -518,8 +562,6 @@ def control():
         if repo_url:
             install_path = os.path.dirname(os.path.abspath(__file__))
             min_url = repo_url.replace("agent.py", "ministerio.svg")
-            
-            # IGUAL QUE EL INSTALL.SH: IPv4 forzado y comillas dobles
             cmd = f'sleep 2 && wget -4 -qO /tmp/new_agent.py "{repo_url}" && mv /tmp/new_agent.py {install_path}/agent.py && wget -4 -qO {os.path.expanduser("~/control_remoto")}/ministerio.svg "{min_url}" && sudo reboot'
             subprocess.Popen(cmd, shell=True)
             return jsonify({"status": "ok", "msg": "OTA iniciada"})
@@ -532,8 +574,6 @@ def control():
             def download_logos():
                 t_dir = os.path.expanduser('~/control_remoto')
                 os.makedirs(t_dir, exist_ok=True)
-                
-                # Sigue detectando el formato dinámicamente de la URL
                 ext = "jpg"
                 u_lower = url_hosp.lower()
                 if ".png" in u_lower: ext = "png"
@@ -543,15 +583,11 @@ def control():
                 elif ".jpeg" in u_lower: ext = "jpeg"
                 
                 logo_name = f"logo_hospital.{ext}"
-                
-                # Limpia los viejos
                 os.system(f"rm -f {t_dir}/logo_hospital.*")
                 
-                # EXACTAMENTE LA MISMA SINTAXIS DEL INSTALL.SH (-4 y comillas dobles)
                 subprocess.run(f'wget -4 -qO {t_dir}/{logo_name} "{url_hosp}"', shell=True)
                 subprocess.run(f'wget -4 -qO {t_dir}/ministerio.svg "{url_min}"', shell=True)
                 
-                # Reconstruye el HTML con el nombre exacto y F5
                 setup_mantenimiento_ui(custom_logo=logo_name)
                 run_cmd("xdotool search --onlyvisible --class 'chromium' windowactivate key F5")
 
@@ -559,6 +595,28 @@ def control():
             return jsonify({"status": "ok", "msg": "Logos actualizados"})
         return jsonify({"error": "Faltan URLs"}), 400
         
+    elif acc == 'set_resolution':
+        res = request.json.get('resolution', 'auto')
+        try:
+            if res != "auto" and "x" in res:
+                w, h = res.split("x")
+                # Generamos el modeline y forzamos la resolución con cvt + xrandr (Ideal para VMs)
+                cmd = (
+                    f"disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1); "
+                    f"modeline=$(cvt {w} {h} 60 | grep Modeline | cut -d' ' -f3-); "
+                    f"xrandr --newmode '{res}' $modeline 2>/dev/null; "
+                    f"xrandr --addmode $disp '{res}' 2>/dev/null; "
+                    f"xrandr --output $disp --mode '{res}'"
+                )
+                run_cmd(cmd)
+            else:
+                run_cmd("disp=$(xrandr | grep ' connected' | cut -f1 -d' ' | head -n 1) && [ -n \"$disp\" ] && xrandr --output \"$disp\" --auto")
+            
+            return jsonify({"status": "ok", "msg": f"Resolucion aplicada"})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    elif acc == 'reset_hdmi': run_cmd("xrandr --auto")
     elif acc == 'wol':
         target_mac = request.json.get('mac')
         if target_mac: send_wol(target_mac)
