@@ -43,8 +43,8 @@ echo -e "🏥 ${BLUE}Configuración de la Institución (Marca Blanca)${NC}"
 read -p "➤ Ingrese el Nombre del Establecimiento [Ej: HIGA San Martín]: " HOSP_NAME
 HOSP_NAME=${HOSP_NAME:-"Establecimiento de Salud"}
 
-read -p "➤ Ingrese la URL del Logo del Establecimiento (JPG/PNG): " LOGO_URL
-LOGO_URL=${LOGO_URL:-"https://hospitalsanmartin.ar/wp-content/uploads/2024/02/cropped-WhatsApp-Image-2024-01-29-at-10.39.37.jpeg"}
+read -p "➤ Ingrese la URL del Logo del Establecimiento (JPG/PNG/SVG): " LOGO_URL
+LOGO_URL=${LOGO_URL:-""}
 echo " "
 
 # 2. ACTUALIZACIÓN E INSTALACIÓN DE PAQUETES (INCLUYE SSH)
